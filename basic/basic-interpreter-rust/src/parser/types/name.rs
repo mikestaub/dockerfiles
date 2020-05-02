@@ -9,6 +9,23 @@ pub enum Name {
     Qualified(QualifiedName),
 }
 
+impl Name {
+    pub fn new<S: AsRef<str>>(word: S, optional_type_qualifier: Option<TypeQualifier>) -> Self {
+        match optional_type_qualifier {
+            Some(q) => Self::new_qualified(word, q),
+            None => Self::new_bare(word),
+        }
+    }
+
+    pub fn new_bare<S: AsRef<str>>(word: S) -> Self {
+        Name::Bare(CaseInsensitiveString::new(word.as_ref().to_string()))
+    }
+
+    pub fn new_qualified<S: AsRef<str>>(word: S, qualifier: TypeQualifier) -> Self {
+        Name::Qualified(QualifiedName::new(word, qualifier))
+    }
+}
+
 impl NameTrait for Name {
     fn bare_name(&self) -> &CaseInsensitiveString {
         match self {

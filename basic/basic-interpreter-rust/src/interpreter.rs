@@ -303,17 +303,15 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 );
             }
             Instruction::CopyVarToA(n) => {
-                match self.context_ref().get_r_value(&n.clone().at(pos))? {
+                let name_node: NameNode = n.clone().at(pos);
+                match self.context_ref().get_r_value(&name_node)? {
                     Some(v) => self.set_a(v),
                     None => panic!("Variable {} undefined at {:?}", n, pos),
                 }
             }
             Instruction::CopyVarToB(n) => {
-                let v = self
-                    .context_ref()
-                    .get_r_value(&n.clone().at(pos))?
-                    .unwrap()
-                    .clone();
+                let name_node: NameNode = n.clone().at(pos);
+                let v = self.context_ref().get_r_value(&name_node)?.unwrap().clone();
                 self.set_b(v);
             }
             Instruction::LessThan => {

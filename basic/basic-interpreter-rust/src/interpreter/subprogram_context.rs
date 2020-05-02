@@ -30,17 +30,17 @@ impl<T: NameTrait> ResolveInto<QualifiedName> for T {
 
 impl<T: NameTrait> QualifiedDeclarationNode<T> {
     pub fn new<TR: TypeResolver, TName>(
-        name: Locatable<TName>,
+        name: TName,
         parameters: Vec<NameNode>,
         pos: Location,
         resolver: &TR,
     ) -> Self
     where
-        TName: NameTrait + ResolveInto<T>,
+        TName: HasLocation + NameTrait + ResolveInto<T>,
     {
         QualifiedDeclarationNode {
             // TODO: find all .consume().0
-            name: TName::resolve_into(name.as_ref(), resolver),
+            name: TName::resolve_into(&name, resolver),
             parameters: parameters
                 .into_iter()
                 .map(|x| NameNode::resolve_into(&x, resolver))
@@ -76,17 +76,17 @@ pub struct QualifiedImplementationNode<T: NameTrait> {
 
 impl<T: Clone + NameTrait> QualifiedImplementationNode<T> {
     pub fn new<TR: TypeResolver, TName>(
-        name: Locatable<TName>,
+        name: TName,
         parameters: Vec<NameNode>,
         block: BlockNode,
         pos: Location,
         resolver: &TR,
     ) -> Self
     where
-        TName: NameTrait + ResolveInto<T>,
+        TName: HasLocation + NameTrait + ResolveInto<T>,
     {
         QualifiedImplementationNode {
-            name: TName::resolve_into(name.as_ref(), resolver),
+            name: TName::resolve_into(&name, resolver),
             parameters: parameters
                 .into_iter()
                 .map(|x| NameNode::resolve_into(&x, resolver))
@@ -162,9 +162,9 @@ impl<T: NameTrait> SubprogramContext<T> {
         self.implementations.get(name.bare_name())
     }
 
-    pub fn add_declaration<TR: TypeResolver, TName: NameTrait + ResolveInto<T>>(
+    pub fn add_declaration<TR: TypeResolver, TName: HasLocation + NameTrait + ResolveInto<T>>(
         &mut self,
-        name: Locatable<TName>,
+        name: TName,
         parameters: Vec<NameNode>,
         pos: Location,
         resolver: &TR,
@@ -182,9 +182,9 @@ impl<T: NameTrait> SubprogramContext<T> {
         }
     }
 
-    pub fn add_implementation<TR: TypeResolver, TName: NameTrait + ResolveInto<T>>(
+    pub fn add_implementation<TR: TypeResolver, TName: HasLocation + NameTrait + ResolveInto<T>>(
         &mut self,
-        name_node: Locatable<TName>,
+        name_node: TName,
         parameters: Vec<NameNode>,
         block: BlockNode,
         pos: Location,
@@ -195,7 +195,7 @@ impl<T: NameTrait> SubprogramContext<T> {
             err_pre_process("Duplicate definition", pos)
         } else {
             self.validate_against_existing_declaration(&name_node, &parameters, pos, resolver)?;
-            let resolved_name: T = TName::resolve_into(name_node.as_ref(), resolver);
+            let resolved_name: T = TName::resolve_into(&name_node, resolver);
             let modified_block = BlockNode::assignment_to_set_return_value(block, &resolved_name)?;
             self.implementations.insert(
                 bare_name.clone(),
@@ -213,10 +213,10 @@ impl<T: NameTrait> SubprogramContext<T> {
 
     fn validate_against_existing_declaration<
         TR: TypeResolver,
-        TName: NameTrait + ResolveInto<T>,
+        TName: HasLocation + NameTrait + ResolveInto<T>,
     >(
         &self,
-        name_node: &Locatable<TName>,
+        name_node: &TName,
         parameters: &Vec<NameNode>,
         pos: Location,
         resolver: &TR,

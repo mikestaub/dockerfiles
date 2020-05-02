@@ -80,12 +80,12 @@ impl<S: Stdlib> Interpreter<S> {
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         // TODO validate arg len for ENVIRON$
-        let (name, pos) = function_name.consume();
+        let pos = function_name.location();
         self.generate_push_unnamed_args_instructions(result, args, pos)?;
         result.instructions.push(Instruction::PushStack.at(pos));
         result
             .instructions
-            .push(Instruction::BuiltInFunction(name).at(pos));
+            .push(Instruction::BuiltInFunction(function_name.strip_location()).at(pos));
         Ok(())
     }
 }

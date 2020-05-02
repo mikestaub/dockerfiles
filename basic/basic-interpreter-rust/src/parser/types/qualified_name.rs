@@ -9,8 +9,11 @@ pub struct QualifiedName {
 }
 
 impl QualifiedName {
-    pub fn new(name: CaseInsensitiveString, qualifier: TypeQualifier) -> Self {
-        QualifiedName { name, qualifier }
+    pub fn new<S: AsRef<str>>(name: S, qualifier: TypeQualifier) -> Self {
+        QualifiedName {
+            name: CaseInsensitiveString::new(name.as_ref().to_string()),
+            qualifier,
+        }
     }
 
     pub fn consume(self) -> (CaseInsensitiveString, TypeQualifier) {

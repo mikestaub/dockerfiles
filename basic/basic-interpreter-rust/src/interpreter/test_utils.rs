@@ -1,4 +1,4 @@
-use crate::common::Location;
+use crate::common::*;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::variant::Variant;
 use crate::interpreter::{Instruction, Interpreter, InterpreterError, Result, Stdlib};
@@ -125,9 +125,8 @@ impl Stdlib for MockStdlib {
 impl<S: Stdlib> Interpreter<S> {
     pub fn get_variable_str(&self, name: &str) -> Result<Variant> {
         let pos = Location::start();
-        let n = Name::from(name);
         self.context_ref()
-            .get_r_value(&NameNode::new(n, pos))
+            .get_r_value(&Name::from(name).at(pos))
             .map(|x| x.unwrap())
     }
 }
@@ -150,14 +149,14 @@ pub struct AssignmentBuilder {
 impl AssignmentBuilder {
     pub fn new(variable_literal: &str) -> AssignmentBuilder {
         AssignmentBuilder {
-            variable_name_node: NameNode::new(Name::from(variable_literal), Location::new(1, 1)),
+            variable_name_node: Name::from(variable_literal).at(Location::start()),
             program: String::new(),
         }
     }
 
     pub fn literal(&mut self, expression_literal: &str) -> &mut Self {
         if self.program.is_empty() {
-            let variable_name: &Name = self.variable_name_node.as_ref();
+            let variable_name: Name = self.variable_name_node.clone().strip_location();
             self.program = format!("{} = {}", variable_name, expression_literal);
             self
         } else {

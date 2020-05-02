@@ -1,7 +1,7 @@
 use super::{
     Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
 };
-use crate::common::{AtLocation, HasLocation};
+use crate::common::*;
 use crate::parser::*;
 
 impl<S: Stdlib> Interpreter<S> {
@@ -63,7 +63,7 @@ impl<S: Stdlib> Interpreter<S> {
                 if !only_const || result.constants.contains(name_node.bare_name()) {
                     result
                         .instructions
-                        .push(Instruction::CopyVarToA(name_node.consume().0).at(pos));
+                        .push(Instruction::CopyVarToA(name_node.strip_location()).at(pos));
                     Ok(())
                 } else {
                     Err(InterpreterError::new_with_pos("Invalid constant", pos))

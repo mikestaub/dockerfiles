@@ -1,7 +1,4 @@
-use super::{
-    unexpected, ExpressionNode, NameNode, Operand, OperandNode, Parser, ParserError, UnaryOperand,
-    UnaryOperandNode,
-};
+use super::*;
 use crate::common::{Locatable, Location};
 use crate::lexer::{Keyword, LexemeNode};
 use std::convert::TryFrom;
@@ -195,13 +192,13 @@ impl<T: BufRead> Parser<T> {
         if found_opening_parenthesis {
             let args = self.parse_expression_list_with_parentheses()?;
             Ok(ExpressionNode::FunctionCall(
-                NameNode::from(word, qualifier, pos),
+                Name::new(word, qualifier).at(pos),
                 args,
             ))
         } else {
-            Ok(ExpressionNode::VariableName(NameNode::from(
-                word, qualifier, pos,
-            )))
+            Ok(ExpressionNode::VariableName(
+                Name::new(word, qualifier).at(pos),
+            ))
         }
     }
 

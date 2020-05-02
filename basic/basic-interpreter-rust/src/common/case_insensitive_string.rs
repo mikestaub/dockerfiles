@@ -54,6 +54,12 @@ impl std::hash::Hash for CaseInsensitiveString {
     }
 }
 
+impl AsRef<str> for CaseInsensitiveString {
+    fn as_ref(&self) -> &str {
+        self.inner.as_ref()
+    }
+}
+
 // CmpIgnoreAsciiCase
 
 pub trait CmpIgnoreAsciiCase {

@@ -51,11 +51,11 @@ impl<T: std::fmt::Debug + Sized> AsRef<T> for Locatable<T> {
 
 // AtLocation
 
-pub trait AtLocation<T: std::fmt::Debug + Sized> {
-    fn at(self, pos: Location) -> Locatable<T>;
+pub trait AtLocation<T> {
+    fn at(self, pos: Location) -> T;
 }
 
-impl<T: std::fmt::Debug + Sized> AtLocation<T> for T {
+impl<T: std::fmt::Debug + Sized> AtLocation<Locatable<T>> for T {
     fn at(self, pos: Location) -> Locatable<T> {
         Locatable::new(self, pos)
     }

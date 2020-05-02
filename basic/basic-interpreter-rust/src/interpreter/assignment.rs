@@ -1,6 +1,4 @@
-use super::{
-    Instruction, InstructionContext, InstructionNode, Interpreter, Result, Stdlib, Variant,
-};
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
 use crate::common::*;
 use crate::parser::*;
 
@@ -12,7 +10,8 @@ impl<S: Stdlib> Interpreter<S> {
         r: ExpressionNode,
     ) -> Result<()> {
         self.generate_expression_instructions(results, r)?;
-        results.push(Instruction::Store(l.as_ref().clone()), l.location());
+        let pos = l.location();
+        results.push(Instruction::Store(l.strip_location()), pos);
         Ok(())
     }
 }

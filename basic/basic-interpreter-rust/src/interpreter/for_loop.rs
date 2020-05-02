@@ -17,7 +17,7 @@ impl<S: Stdlib> Interpreter<S> {
             pos,
             next_counter: _,
         } = f;
-        let counter_var_name: Name = variable_name.consume().0;
+        let counter_var_name: Name = variable_name.strip_location();
 
         // lower bound to A
         self.generate_expression_instructions(result, lower_bound)?;

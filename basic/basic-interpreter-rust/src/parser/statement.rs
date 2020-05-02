@@ -1,8 +1,4 @@
-use super::{
-    unexpected, BareNameNode, BlockNode, Name, NameNode, Parser, ParserError, QualifiedName,
-    StatementNode, TypeQualifier,
-};
-use crate::common::{CaseInsensitiveString, Location};
+use super::*;
 use crate::lexer::{Keyword, LexemeNode};
 use std::convert::TryFrom;
 use std::io::BufRead;
@@ -75,10 +71,9 @@ impl<T: BufRead> Parser<T> {
             }
             LexemeNode::Symbol('=', _) => {
                 // assignment, left-side unqualified name node
-                self.read_demand_assignment_skipping_whitespace(NameNode::new(
-                    Name::Bare(bare_name),
-                    bare_name_pos,
-                ))
+                self.read_demand_assignment_skipping_whitespace(
+                    Name::new_bare(bare_name).at(bare_name_pos),
+                )
             }
             LexemeNode::Symbol(':', _) => {
                 // label
@@ -90,10 +85,9 @@ impl<T: BufRead> Parser<T> {
                 }
             }
             LexemeNode::Symbol(ch, _) => match TypeQualifier::try_from(ch) {
-                Ok(q) => self._demand_assignment_or_sub_call_with_qualified_name(NameNode::new(
-                    Name::Qualified(QualifiedName::new(bare_name, q)),
-                    bare_name_pos,
-                )),
+                Ok(q) => self._demand_assignment_or_sub_call_with_qualified_name(
+                    Name::new_qualified(bare_name, q).at(bare_name_pos),
+                ),
                 Err(_) => unexpected("Expected type qualifier", next),
             },
             _ => unexpected("Syntax error", next),
@@ -109,7 +103,7 @@ impl<T: BufRead> Parser<T> {
         let next = self.buf_lexer.read()?;
         match next {
             LexemeNode::Symbol('=', _) => self.read_demand_assignment_skipping_whitespace(
-                NameNode::new(Name::Bare(bare_name), bare_name_pos),
+                Name::new_bare(bare_name).at(bare_name_pos),
             ),
             _ => self.demand_sub_call(BareNameNode::new(bare_name, bare_name_pos), next),
         }

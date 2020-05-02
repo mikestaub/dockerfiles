@@ -10,7 +10,7 @@ pub trait NameTrait: Sized + std::fmt::Debug + Clone {
     }
 
     fn to_qualified_name<T: TypeResolver>(&self, resolver: &T) -> QualifiedName {
-        QualifiedName::new(self.bare_name().clone(), resolver.resolve(self))
+        QualifiedName::new(self.bare_name(), resolver.resolve(self))
     }
 
     fn eq_resolve<T: TypeResolver, U: NameTrait>(&self, other: &U, resolver: &T) -> bool {
@@ -23,5 +23,15 @@ pub trait NameTrait: Sized + std::fmt::Debug + Clone {
             Some(q) => q == other,
             None => true,
         }
+    }
+}
+
+impl<T: NameTrait> NameTrait for Locatable<T> {
+    fn bare_name(&self) -> &CaseInsensitiveString {
+        self.as_ref().bare_name()
+    }
+
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
+        self.as_ref().opt_qualifier()
     }
 }

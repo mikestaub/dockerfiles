@@ -214,8 +214,8 @@ impl AllFunctionsKnown for ExpressionNode {
                 if built_in_functions::is_built_in_function(n) {
                     // TODO: validate ENVIRON$
                     Ok(())
-                } else if function_context.has_implementation(n.as_ref()) {
-                    let func_impl = function_context.get_implementation_ref(n.as_ref()).unwrap();
+                } else if function_context.has_implementation(n) {
+                    let func_impl = function_context.get_implementation_ref(n).unwrap();
                     check_function_return_type_on_call(n, func_impl)?;
                     check_function_args_on_call(n, args, func_impl)
                 } else {

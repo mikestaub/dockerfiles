@@ -2,7 +2,7 @@ use super::{
     BareNameNode, ExpressionNode, Name, NameNode, Parser, ParserError, ProgramNode, StatementNode,
     TopLevelTokenNode,
 };
-use crate::common::{CaseInsensitiveString, Location};
+use crate::common::*;
 use std::fs::File;
 
 /// Parses the given program and demands success.
@@ -61,7 +61,7 @@ pub trait NameNodeFactory {
 
 impl NameNodeFactory for str {
     fn as_name(&self, row: u32, col: u32) -> NameNode {
-        NameNode::new(Name::from(self), Location::new(row, col))
+        Name::from(self).at(Location::new(row, col))
     }
 
     fn as_bare_name(&self, row: u32, col: u32) -> BareNameNode {

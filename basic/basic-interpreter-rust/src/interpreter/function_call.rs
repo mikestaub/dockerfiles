@@ -15,8 +15,8 @@ impl<S: Stdlib> Interpreter<S> {
         if is_built_in_function(&function_name) {
             self.generate_built_in_function_call_instructions(result, function_name, args)?;
         } else {
-            let (name, pos) = function_name.consume();
-            let bare_name: &CaseInsensitiveString = name.bare_name();
+            let pos = function_name.location();
+            let bare_name: &CaseInsensitiveString = function_name.bare_name();
             match self.function_context.get_implementation(bare_name) {
                 Some(function_impl) => {
                     let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
@@ -72,7 +72,7 @@ impl<S: Stdlib> Interpreter<S> {
             match e {
                 ExpressionNode::VariableName(v_name) => {
                     result.instructions.push(
-                        Instruction::SetNamedRefParam(n.clone(), v_name.as_ref().clone()).at(pos),
+                        Instruction::SetNamedRefParam(n.clone(), v_name.strip_location()).at(pos),
                     );
                 }
                 _ => {
@@ -99,7 +99,7 @@ impl<S: Stdlib> Interpreter<S> {
                 ExpressionNode::VariableName(v_name) => {
                     result
                         .instructions
-                        .push(Instruction::PushUnnamedRefParam(v_name.as_ref().clone()).at(pos));
+                        .push(Instruction::PushUnnamedRefParam(v_name.strip_location()).at(pos));
                 }
                 _ => {
                     self.generate_expression_instructions(result, e)?;
