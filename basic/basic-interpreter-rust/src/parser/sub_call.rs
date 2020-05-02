@@ -51,8 +51,8 @@ impl<T: BufRead> Parser<T> {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
-    use crate::common::Location;
-    use crate::parser::{Operand, OperandNode, TopLevelTokenNode};
+    use crate::common::*;
+    use crate::parser::{Expression, Name, Operand, TopLevelTokenNode};
 
     #[test]
     fn test_parse_sub_call_no_args() {
@@ -144,10 +144,11 @@ mod tests {
             program,
             vec![TopLevelTokenNode::Statement(StatementNode::SubCall(
                 "PRINT".as_bare_name(1, 1),
-                vec![ExpressionNode::FunctionCall(
-                    "ENVIRON$".as_name(1, 7),
+                vec![Expression::FunctionCall(
+                    Name::from("ENVIRON$"),
                     vec!["PATH".as_lit_expr(1, 16)]
-                )]
+                )
+                .at_rc(1, 7)]
             ))]
         );
     }
@@ -220,15 +221,19 @@ mod tests {
                     vec!["N$".as_name(4, 19), "V$".as_name(4, 23)],
                     vec![StatementNode::SubCall(
                         "ENVIRON".as_bare_name(5, 13),
-                        vec![ExpressionNode::BinaryExpression(
-                            OperandNode::new(Operand::Plus, Location::new(5, 24)),
+                        vec![Expression::BinaryExpression(
+                            Operand::Plus,
                             Box::new("N$".as_var_expr(5, 21)),
-                            Box::new(ExpressionNode::BinaryExpression(
-                                OperandNode::new(Operand::Plus, Location::new(5, 30)),
-                                Box::new("=".as_lit_expr(5, 26)),
-                                Box::new("V$".as_var_expr(5, 32))
-                            ))
-                        )]
+                            Box::new(
+                                Expression::BinaryExpression(
+                                    Operand::Plus,
+                                    Box::new("=".as_lit_expr(5, 26)),
+                                    Box::new("V$".as_var_expr(5, 32))
+                                )
+                                .at_rc(5, 30)
+                            )
+                        )
+                        .at_rc(5, 24)]
                     )],
                     Location::new(4, 9)
                 )

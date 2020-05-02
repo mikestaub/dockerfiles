@@ -194,7 +194,7 @@ impl From<File> for Parser<BufReader<File>> {
 mod tests {
     use super::test_utils::*;
     use super::*;
-    use crate::common::Location;
+    use crate::common::*;
 
     #[test]
     fn test_parse_fixture_fib() {
@@ -232,10 +232,11 @@ mod tests {
                                 "Fibonacci of".as_lit_expr(5, 11),
                                 "I".as_var_expr(5, 27),
                                 "is".as_lit_expr(5, 30),
-                                ExpressionNode::FunctionCall(
-                                    "Fib".as_name(5, 36),
+                                Expression::FunctionCall(
+                                    Name::from("Fib"),
                                     vec!["I".as_var_expr(5, 40)],
-                                ),
+                                )
+                                .at_rc(5, 36),
                             ],
                         ),
                     ],
@@ -252,14 +253,12 @@ mod tests {
                             if_block: ConditionalBlockNode {
                                 pos: Location::new(9, 5),
                                 // N <= 1
-                                condition: ExpressionNode::BinaryExpression(
-                                    OperandNode::new(
-                                        Operand::LessOrEqualThan,
-                                        Location::new(9, 10)
-                                    ),
+                                condition: Expression::BinaryExpression(
+                                    Operand::LessOrEqualThan,
                                     Box::new("N".as_var_expr(9, 8)),
                                     Box::new(1.as_lit_expr(9, 13))
-                                ),
+                                )
+                                .at_rc(9, 10),
                                 statements: vec![
                                     // Fib = N
                                     StatementNode::Assignment(
@@ -273,31 +272,34 @@ mod tests {
                                 // ELSE Fib = Fib(N - 1) + Fib(N - 2)
                                 StatementNode::Assignment(
                                     "Fib".as_name(12, 9),
-                                    ExpressionNode::BinaryExpression(
-                                        OperandNode::new(Operand::Plus, Location::new(12, 26)),
-                                        Box::new(ExpressionNode::FunctionCall(
-                                            "Fib".as_name(12, 15),
-                                            vec![ExpressionNode::BinaryExpression(
-                                                OperandNode::new(
+                                    Expression::BinaryExpression(
+                                        Operand::Plus,
+                                        Box::new(
+                                            Expression::FunctionCall(
+                                                Name::from("Fib"),
+                                                vec![Expression::BinaryExpression(
                                                     Operand::Minus,
-                                                    Location::new(12, 21)
-                                                ),
-                                                Box::new("N".as_var_expr(12, 19)),
-                                                Box::new(1.as_lit_expr(12, 23)),
-                                            )]
-                                        )),
-                                        Box::new(ExpressionNode::FunctionCall(
-                                            "Fib".as_name(12, 28),
-                                            vec![ExpressionNode::BinaryExpression(
-                                                OperandNode::new(
+                                                    Box::new("N".as_var_expr(12, 19)),
+                                                    Box::new(1.as_lit_expr(12, 23)),
+                                                )
+                                                .at_rc(12, 21)]
+                                            )
+                                            .at_rc(12, 15)
+                                        ),
+                                        Box::new(
+                                            Expression::FunctionCall(
+                                                Name::from("Fib"),
+                                                vec![Expression::BinaryExpression(
                                                     Operand::Minus,
-                                                    Location::new(12, 34)
-                                                ),
-                                                Box::new("N".as_var_expr(12, 32)),
-                                                Box::new(2.as_lit_expr(12, 36)),
-                                            )]
-                                        ))
+                                                    Box::new("N".as_var_expr(12, 32)),
+                                                    Box::new(2.as_lit_expr(12, 36)),
+                                                )
+                                                .at_rc(12, 34)]
+                                            )
+                                            .at_rc(12, 28)
+                                        )
                                     )
+                                    .at_rc(12, 26)
                                 )
                             ])
                         })

@@ -9,6 +9,12 @@ pub enum Name {
     Qualified(QualifiedName),
 }
 
+impl AsRef<Name> for Name {
+    fn as_ref(&self) -> &Name {
+        self
+    }
+}
+
 impl Name {
     pub fn new<S: AsRef<str>>(word: S, optional_type_qualifier: Option<TypeQualifier>) -> Self {
         match optional_type_qualifier {

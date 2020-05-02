@@ -19,11 +19,10 @@ impl<T: BufRead> Parser<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::common::Location;
+    use crate::common::*;
     use crate::parser::test_utils::*;
     use crate::parser::{
-        ConditionalBlockNode, ExpressionNode, Operand, OperandNode, StatementNode,
-        TopLevelTokenNode,
+        ConditionalBlockNode, Expression, ExpressionNode, Operand, StatementNode, TopLevelTokenNode,
     };
 
     #[test]
@@ -39,11 +38,12 @@ mod tests {
             vec![TopLevelTokenNode::Statement(StatementNode::While(
                 ConditionalBlockNode::new(
                     Location::new(2, 9),
-                    ExpressionNode::BinaryExpression(
-                        OperandNode::new(Operand::LessThan, Location::new(2, 17)),
+                    Expression::BinaryExpression(
+                        Operand::LessThan,
                         Box::new("A".as_var_expr(2, 15)),
                         Box::new(5.as_lit_expr(2, 19))
-                    ),
+                    )
+                    .at_rc(2, 17),
                     vec![StatementNode::SubCall("SYSTEM".as_bare_name(3, 13), vec![])]
                 )
             ))]

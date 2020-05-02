@@ -134,7 +134,7 @@ impl<T: BufRead> Parser<T> {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
-    use crate::parser::TopLevelTokenNode;
+    use crate::parser::{Expression, Name, TopLevelTokenNode};
     use crate::{assert_sub_call, assert_top_sub_call, assert_var_expr};
 
     #[test]
@@ -169,7 +169,7 @@ mod tests {
         match &program[0] {
             TopLevelTokenNode::Statement(StatementNode::IfBlock(i)) => {
                 // if condition
-                assert_var_expr!(i.if_block.condition, "X");
+                assert_var_expr!(i.if_block.condition.clone().strip_location(), "X");
                 // if block
                 assert_eq!(1, i.if_block.statements.len());
                 assert_sub_call!(i.if_block.statements[0], "PRINT", "X");

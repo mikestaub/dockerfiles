@@ -128,8 +128,8 @@ impl<T: BufRead> Parser<T> {
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
-    use crate::common::Location;
-    use crate::parser::{ExpressionNode, Operand, OperandNode, StatementNode, TopLevelTokenNode};
+    use crate::common::*;
+    use crate::parser::{Expression, ExpressionNode, Operand, StatementNode, TopLevelTokenNode};
 
     macro_rules! assert_function_declaration {
         ($input:expr, $expected_function_name:expr, $expected_params:expr) => {
@@ -172,11 +172,12 @@ mod tests {
                 vec!["A".as_name(2, 22), "B".as_name(2, 25)],
                 vec![StatementNode::Assignment(
                     "Add".as_name(3, 13),
-                    ExpressionNode::BinaryExpression(
-                        OperandNode::new(Operand::Plus, Location::new(3, 21)),
+                    Expression::BinaryExpression(
+                        Operand::Plus,
                         Box::new("A".as_var_expr(3, 19)),
                         Box::new("B".as_var_expr(3, 23))
                     )
+                    .at(Location::new(3, 21))
                 )],
                 Location::new(2, 9)
             )
@@ -198,11 +199,12 @@ mod tests {
                 vec!["a".as_name(2, 22), "b".as_name(2, 25)],
                 vec![StatementNode::Assignment(
                     "add".as_name(3, 13),
-                    ExpressionNode::BinaryExpression(
-                        OperandNode::new(Operand::Plus, Location::new(3, 21)),
+                    Expression::BinaryExpression(
+                        Operand::Plus,
                         Box::new("a".as_var_expr(3, 19)),
                         Box::new("b".as_var_expr(3, 23))
                     )
+                    .at_rc(3, 21)
                 )],
                 Location::new(2, 9)
             )

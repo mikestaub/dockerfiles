@@ -67,16 +67,16 @@ impl<S: Stdlib> Interpreter<S> {
         // TODO validate arg count and param count match
         // TODO validate cast if by val, same type if by ref
         result.instructions.push(Instruction::PreparePush.at(pos));
-        for (n, e) in param_names.iter().zip(expressions.into_iter()) {
-            let pos = e.location();
+        for (n, e_node) in param_names.iter().zip(expressions.into_iter()) {
+            let (e, pos) = e_node.consume();
             match e {
-                ExpressionNode::VariableName(v_name) => {
-                    result.instructions.push(
-                        Instruction::SetNamedRefParam(n.clone(), v_name.strip_location()).at(pos),
-                    );
+                Expression::VariableName(v_name) => {
+                    result
+                        .instructions
+                        .push(Instruction::SetNamedRefParam(n.clone(), v_name).at(pos));
                 }
                 _ => {
-                    self.generate_expression_instructions(result, e)?;
+                    self.generate_expression_instructions(result, e.at(pos))?;
                     result
                         .instructions
                         .push(Instruction::SetNamedValParam(n.clone()).at(pos));
@@ -93,16 +93,16 @@ impl<S: Stdlib> Interpreter<S> {
         pos: Location,
     ) -> Result<()> {
         result.instructions.push(Instruction::PreparePush.at(pos));
-        for e in expressions.into_iter() {
-            let pos = e.location();
+        for e_node in expressions.into_iter() {
+            let (e, pos) = e_node.consume();
             match e {
-                ExpressionNode::VariableName(v_name) => {
+                Expression::VariableName(v_name) => {
                     result
                         .instructions
-                        .push(Instruction::PushUnnamedRefParam(v_name.strip_location()).at(pos));
+                        .push(Instruction::PushUnnamedRefParam(v_name).at(pos));
                 }
                 _ => {
-                    self.generate_expression_instructions(result, e)?;
+                    self.generate_expression_instructions(result, e.at(pos))?;
                     result
                         .instructions
                         .push(Instruction::PushUnnamedValParam.at(pos));

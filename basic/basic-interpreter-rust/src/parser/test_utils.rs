@@ -1,6 +1,6 @@
 use super::{
-    BareNameNode, ExpressionNode, Name, NameNode, Parser, ParserError, ProgramNode, StatementNode,
-    TopLevelTokenNode,
+    BareNameNode, Expression, ExpressionNode, Name, NameNode, Parser, ParserError, ProgramNode,
+    StatementNode, TopLevelTokenNode,
 };
 use crate::common::*;
 use std::fs::File;
@@ -83,25 +83,25 @@ pub trait ExpressionNodeLiteralFactory {
 
 impl ExpressionNodeLiteralFactory for &str {
     fn as_lit_expr(&self, row: u32, col: u32) -> ExpressionNode {
-        ExpressionNode::StringLiteral(self.to_string(), Location::new(row, col))
+        Expression::StringLiteral(self.to_string()).at_rc(row, col)
     }
 }
 
 impl ExpressionNodeLiteralFactory for i32 {
     fn as_lit_expr(&self, row: u32, col: u32) -> ExpressionNode {
-        ExpressionNode::IntegerLiteral(*self, Location::new(row, col))
+        Expression::IntegerLiteral(*self).at_rc(row, col)
     }
 }
 
 impl ExpressionNodeLiteralFactory for f32 {
     fn as_lit_expr(&self, row: u32, col: u32) -> ExpressionNode {
-        ExpressionNode::SingleLiteral(*self, Location::new(row, col))
+        Expression::SingleLiteral(*self).at_rc(row, col)
     }
 }
 
 impl ExpressionNodeLiteralFactory for f64 {
     fn as_lit_expr(&self, row: u32, col: u32) -> ExpressionNode {
-        ExpressionNode::DoubleLiteral(*self, Location::new(row, col))
+        Expression::DoubleLiteral(*self).at_rc(row, col)
     }
 }
 
@@ -116,7 +116,7 @@ pub trait ExpressionNodeVariableFactory {
 
 impl ExpressionNodeVariableFactory for str {
     fn as_var_expr(&self, row: u32, col: u32) -> ExpressionNode {
-        ExpressionNode::VariableName(self.as_name(row, col))
+        Expression::VariableName(Name::from(self)).at_rc(row, col)
     }
 }
 
@@ -130,8 +130,8 @@ impl ExpressionNodeVariableFactory for str {
 #[macro_export]
 macro_rules! assert_var_expr {
     ($left: expr, $expected_var_name: literal) => {
-        match &$left {
-            ExpressionNode::VariableName(v) => assert_eq!(v, $expected_var_name),
+        match $left {
+            Expression::VariableName(v) => assert_eq!(v, Name::from($expected_var_name)),
             _ => panic!(format!(
                 "Expected variable name {}, found {:?}",
                 $expected_var_name, $left
@@ -162,7 +162,7 @@ macro_rules! assert_sub_call {
             StatementNode::SubCall(n, args) => {
                 assert_eq!(n, $name);
                 assert_eq!(1, args.len());
-                assert_var_expr!(args[0], $arg);
+                assert_var_expr!(args[0].clone().strip_location(), $arg);
             }
             _ => panic!(format!(
                 "Expected sub call {} with one arg, found {:?}",

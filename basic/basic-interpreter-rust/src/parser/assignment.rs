@@ -16,16 +16,16 @@ impl<T: BufRead> Parser<T> {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
-    use crate::common::Location;
+    use crate::common::*;
     use crate::lexer::LexemeNode;
-    use crate::parser::StatementNode;
+    use crate::parser::{Expression, StatementNode};
 
     macro_rules! assert_top_level_assignment {
         ($input:expr, $name:expr, $value:expr) => {
             match parse($input).demand_single_statement() {
                 StatementNode::Assignment(n, v) => {
                     assert_eq!(&n, $name);
-                    assert_eq!(v, $value);
+                    assert_eq!(v.strip_location(), Expression::IntegerLiteral($value));
                 }
                 _ => panic!("expected assignment"),
             }

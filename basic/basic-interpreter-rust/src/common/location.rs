@@ -61,6 +61,19 @@ impl<T: std::fmt::Debug + Sized> AtLocation<Locatable<T>> for T {
     }
 }
 
+pub trait AtRowCol<T> {
+    fn at_rc(self, row: u32, col: u32) -> T;
+}
+
+impl<T, U> AtRowCol<U> for T
+where
+    T: AtLocation<U>,
+{
+    fn at_rc(self, row: u32, col: u32) -> U {
+        self.at(Location::new(row, col))
+    }
+}
+
 // HasLocation
 
 pub trait HasLocation {

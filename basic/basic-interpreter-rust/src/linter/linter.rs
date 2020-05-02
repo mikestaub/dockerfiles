@@ -483,30 +483,33 @@ impl Linter {
         Ok(result)
     }
 
-    pub fn resolve_expression_type(&self, e: &ExpressionNode) -> Result<TypeQualifier> {
+    pub fn resolve_expression_type(&self, e_node: &ExpressionNode) -> Result<TypeQualifier> {
+        let pos = e_node.location();
+        let e: &Expression = e_node.as_ref();
         match e {
-            ExpressionNode::SingleLiteral(_, _) => Ok(TypeQualifier::BangSingle),
-            ExpressionNode::DoubleLiteral(_, _) => Ok(TypeQualifier::HashDouble),
-            ExpressionNode::StringLiteral(_, _) => Ok(TypeQualifier::DollarString),
-            ExpressionNode::IntegerLiteral(_, _) => Ok(TypeQualifier::PercentInteger),
-            ExpressionNode::LongLiteral(_, _) => Ok(TypeQualifier::AmpersandLong),
-            ExpressionNode::VariableName(name_node) => {
-                match self.context.get_constant_type_recursively(name_node)? {
+            Expression::SingleLiteral(_) => Ok(TypeQualifier::BangSingle),
+            Expression::DoubleLiteral(_) => Ok(TypeQualifier::HashDouble),
+            Expression::StringLiteral(_) => Ok(TypeQualifier::DollarString),
+            Expression::IntegerLiteral(_) => Ok(TypeQualifier::PercentInteger),
+            Expression::LongLiteral(_) => Ok(TypeQualifier::AmpersandLong),
+            Expression::VariableName(name) => {
+                let name_node: NameNode = name.clone().at(pos);
+                match self.context.get_constant_type_recursively(&name_node)? {
                     Some(q) => Ok(q),
-                    None => Ok(self.resolver.resolve(name_node)),
+                    None => Ok(self.resolver.resolve(name)),
                 }
             }
-            ExpressionNode::FunctionCall(n, args) => {
+            Expression::FunctionCall(n, args) => {
                 let bare_name = n.bare_name();
                 match self.functions.get(bare_name) {
                     Some((udf_type, udf_param_types, _)) => {
                         if args.len() != udf_param_types.len() {
-                            err("Argument count mismatch", n.location())
+                            err("Argument count mismatch", pos)
                         } else if !n.bare_or_eq(*udf_type) {
-                            err("Type mismatch", n.location())
+                            err("Type mismatch", pos)
                         } else if udf_param_types != &self.resolve_args_type(args)? {
                             // TODO specify the location of the offending argument
-                            err("Type mismatch", n.location())
+                            err("Type mismatch", pos)
                         } else {
                             Ok(*udf_type)
                         }
@@ -517,25 +520,25 @@ impl Linter {
                     }
                 }
             }
-            ExpressionNode::BinaryExpression(op, l, r) => {
+            Expression::BinaryExpression(op, l, r) => {
                 let q_left = self.resolve_expression_type(l)?;
                 let q_right = self.resolve_expression_type(r)?;
                 if q_left.can_cast_to(q_right) {
-                    match op.as_ref() {
+                    match op {
                         Operand::Plus | Operand::Minus => Ok(q_left),
                         Operand::LessThan | Operand::LessOrEqualThan => {
                             Ok(TypeQualifier::PercentInteger)
                         }
                     }
                 } else {
-                    err("Type mismatch", op.location())
+                    err("Type mismatch", pos)
                 }
             }
-            ExpressionNode::UnaryExpression(op, c) => {
+            Expression::UnaryExpression(op, c) => {
                 let q_child = self.resolve_expression_type(c)?;
                 if q_child == TypeQualifier::DollarString {
                     // no unary operator currently applicable to strings
-                    err("Type mismatch", op.location())
+                    err("Type mismatch", pos)
                 } else {
                     Ok(q_child)
                 }
@@ -588,19 +591,21 @@ pub enum QStatementNode {
 pub type QBlockNode = Vec<QStatementNode>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QExpressionNode {
-    SingleLiteral(f32, Location),
-    DoubleLiteral(f64, Location),
-    StringLiteral(String, Location),
-    IntegerLiteral(i32, Location),
+pub enum QExpression {
+    SingleLiteral(f32),
+    DoubleLiteral(f64),
+    StringLiteral(String),
+    IntegerLiteral(i32),
     #[allow(dead_code)]
-    LongLiteral(i64, Location),
-    Constant(QNameNode),
-    Variable(QNameNode),
-    FunctionCall(QNameNode, Vec<QExpressionNode>),
-    BinaryExpression(OperandNode, Box<QExpressionNode>, Box<QExpressionNode>),
-    UnaryExpression(UnaryOperandNode, Box<QExpressionNode>),
+    LongLiteral(i64),
+    Constant(QualifiedName),
+    Variable(QualifiedName),
+    FunctionCall(QualifiedName, Vec<QExpressionNode>),
+    BinaryExpression(Operand, Box<QExpressionNode>, Box<QExpressionNode>),
+    UnaryExpression(UnaryOperand, Box<QExpressionNode>),
 }
+
+pub type QExpressionNode = Locatable<QExpression>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum QTopLevelTokenNode {
@@ -749,38 +754,38 @@ impl Converter<StatementNode, QStatementNode> for Linter {
     }
 }
 
-impl Converter<ExpressionNode, QExpressionNode> for Linter {
-    fn convert(&mut self, a: ExpressionNode) -> Result<QExpressionNode> {
+impl Converter<Expression, QExpression> for Linter {
+    fn convert(&mut self, a: Expression) -> Result<QExpression> {
         match a {
-            ExpressionNode::SingleLiteral(f, pos) => Ok(QExpressionNode::SingleLiteral(f, pos)),
-            ExpressionNode::DoubleLiteral(f, pos) => Ok(QExpressionNode::DoubleLiteral(f, pos)),
-            ExpressionNode::StringLiteral(f, pos) => Ok(QExpressionNode::StringLiteral(f, pos)),
-            ExpressionNode::IntegerLiteral(f, pos) => Ok(QExpressionNode::IntegerLiteral(f, pos)),
-            ExpressionNode::LongLiteral(f, pos) => Ok(QExpressionNode::LongLiteral(f, pos)),
-            ExpressionNode::VariableName(n) => {
+            Expression::SingleLiteral(f) => Ok(QExpression::SingleLiteral(f)),
+            Expression::DoubleLiteral(f) => Ok(QExpression::DoubleLiteral(f)),
+            Expression::StringLiteral(f) => Ok(QExpression::StringLiteral(f)),
+            Expression::IntegerLiteral(f) => Ok(QExpression::IntegerLiteral(f)),
+            Expression::LongLiteral(f) => Ok(QExpression::LongLiteral(f)),
+            Expression::VariableName(n) => {
                 // or constant?
-                Ok(QExpressionNode::Variable(self.convert(n)?))
+                Ok(QExpression::Variable(self.convert(n)?))
             }
-            ExpressionNode::FunctionCall(n, args) => {
+            Expression::FunctionCall(n, args) => {
                 // validate arg count, arg types, name type
                 // for built-in and for user-defined
                 // for undefined, resolve to literal 0, as long as the arguments do not contain a string
-                Ok(QExpressionNode::FunctionCall(
+                Ok(QExpression::FunctionCall(
                     self.convert(n)?,
                     self.convert(args)?,
                 ))
             }
-            ExpressionNode::BinaryExpression(op, l, r) => {
+            Expression::BinaryExpression(op, l, r) => {
                 // types match?
-                Ok(QExpressionNode::BinaryExpression(
+                Ok(QExpression::BinaryExpression(
                     op,
                     self.convert(l)?,
                     self.convert(r)?,
                 ))
             }
-            ExpressionNode::UnaryExpression(op, c) => {
+            Expression::UnaryExpression(op, c) => {
                 // is it a legal op? e.g. -"hello" isn't
-                Ok(QExpressionNode::UnaryExpression(op, self.convert(c)?))
+                Ok(QExpression::UnaryExpression(op, self.convert(c)?))
             }
         }
     }

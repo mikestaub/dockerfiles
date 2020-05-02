@@ -204,9 +204,10 @@ fn check_function_args_on_call(
 }
 
 impl AllFunctionsKnown for ExpressionNode {
-    fn all_functions_known(e: &Self, function_context: &FunctionContext) -> Result<()> {
+    fn all_functions_known(e_node: &Self, function_context: &FunctionContext) -> Result<()> {
+        let e: &Expression = e_node.as_ref();
         match e {
-            Self::FunctionCall(n, args) => {
+            Expression::FunctionCall(n, args) => {
                 for a in args {
                     Self::all_functions_known(a, function_context)?;
                 }
@@ -216,20 +217,21 @@ impl AllFunctionsKnown for ExpressionNode {
                     Ok(())
                 } else if function_context.has_implementation(n) {
                     let func_impl = function_context.get_implementation_ref(n).unwrap();
-                    check_function_return_type_on_call(n, func_impl)?;
-                    check_function_args_on_call(n, args, func_impl)
+                    let name_node: NameNode = n.clone().at(e_node.location());
+                    check_function_return_type_on_call(&name_node, func_impl)?;
+                    check_function_args_on_call(&name_node, args, func_impl)
                 } else {
                     // Unknown function, will fallback to undefined behavior later
                     Ok(())
                 }
             }
-            Self::BinaryExpression(_, left, right) => {
+            Expression::BinaryExpression(_, left, right) => {
                 let unboxed_left: &Self = left;
                 let unboxed_right: &Self = right;
                 Self::all_functions_known(unboxed_left, function_context)?;
                 Self::all_functions_known(unboxed_right, function_context)
             }
-            Self::UnaryExpression(_, child) => {
+            Expression::UnaryExpression(_, child) => {
                 let unboxed_child: &Self = child;
                 Self::all_functions_known(unboxed_child, function_context)
             }
@@ -297,16 +299,19 @@ impl NoFunctionInConst for ConditionalBlockNode {
 }
 
 impl NoFunctionInConst for ExpressionNode {
-    fn no_function_in_const(e: &Self) -> Result<()> {
+    fn no_function_in_const(e_node: &Self) -> Result<()> {
+        let e: &Expression = e_node.as_ref();
         match e {
-            Self::FunctionCall(_, _) => err_pre_process("Invalid constant", e.location()),
-            Self::BinaryExpression(_, left, right) => {
+            Expression::FunctionCall(_, _) => {
+                err_pre_process("Invalid constant", e_node.location())
+            }
+            Expression::BinaryExpression(_, left, right) => {
                 let unboxed_left: &Self = left;
                 let unboxed_right: &Self = right;
                 Self::no_function_in_const(unboxed_left)?;
                 Self::no_function_in_const(unboxed_right)
             }
-            Self::UnaryExpression(_, child) => {
+            Expression::UnaryExpression(_, child) => {
                 let unboxed_child: &Self = child;
                 Self::no_function_in_const(unboxed_child)
             }

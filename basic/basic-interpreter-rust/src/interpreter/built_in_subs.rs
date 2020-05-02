@@ -4,7 +4,9 @@ use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{
     Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
 };
-use crate::parser::{BareNameNode, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver};
+use crate::parser::{
+    BareNameNode, Expression, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver,
+};
 
 pub fn is_built_in_sub(sub_name: &BareNameNode) -> bool {
     sub_name.as_ref() == "ENVIRON"
@@ -51,7 +53,7 @@ impl<S: Stdlib> Interpreter<S> {
             self._do_environ_sub(
                 // TODO cleanup
                 &name.clone().at(pos),
-                &vec![ExpressionNode::StringLiteral("".to_string(), pos)],
+                &vec![Expression::from("").at(pos)],
             )
         } else if name == "INPUT" {
             self._do_input(pos)

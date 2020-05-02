@@ -24,95 +24,86 @@ impl<S: Stdlib> Interpreter<S> {
     fn _generate_expression_instructions(
         &self,
         result: &mut InstructionContext,
-        e: ExpressionNode,
+        e_node: ExpressionNode,
         only_const: bool,
     ) -> Result<()> {
-        let pos = e.location();
+        let (e, pos) = e_node.consume();
         match e {
-            ExpressionNode::SingleLiteral(s, _) => {
+            Expression::SingleLiteral(s) => {
                 result
                     .instructions
                     .push(Instruction::Load(Variant::from(s)).at(pos));
                 Ok(())
             }
-            ExpressionNode::DoubleLiteral(s, _) => {
+            Expression::DoubleLiteral(s) => {
                 result
                     .instructions
                     .push(Instruction::Load(Variant::from(s)).at(pos));
                 Ok(())
             }
-            ExpressionNode::StringLiteral(s, _) => {
+            Expression::StringLiteral(s) => {
                 result
                     .instructions
                     .push(Instruction::Load(Variant::from(s)).at(pos));
                 Ok(())
             }
-            ExpressionNode::IntegerLiteral(s, _) => {
+            Expression::IntegerLiteral(s) => {
                 result
                     .instructions
                     .push(Instruction::Load(Variant::from(s)).at(pos));
                 Ok(())
             }
-            ExpressionNode::LongLiteral(s, _) => {
+            Expression::LongLiteral(s) => {
                 result
                     .instructions
                     .push(Instruction::Load(Variant::from(s)).at(pos));
                 Ok(())
             }
-            ExpressionNode::VariableName(name_node) => {
-                if !only_const || result.constants.contains(name_node.bare_name()) {
+            Expression::VariableName(name) => {
+                if !only_const || result.constants.contains(name.bare_name()) {
                     result
                         .instructions
-                        .push(Instruction::CopyVarToA(name_node.strip_location()).at(pos));
+                        .push(Instruction::CopyVarToA(name).at(pos));
                     Ok(())
                 } else {
                     Err(InterpreterError::new_with_pos("Invalid constant", pos))
                 }
             }
-            ExpressionNode::FunctionCall(n, args) => {
+            Expression::FunctionCall(n, args) => {
                 if only_const {
                     Err(InterpreterError::new_with_pos("Invalid constant", pos))
                 } else {
-                    self.generate_function_call_instructions(result, n, args)?;
+                    let name_node = n.at(pos);
+                    self.generate_function_call_instructions(result, name_node, args)?;
                     Ok(())
                 }
             }
-            ExpressionNode::BinaryExpression(op, left, right) => {
+            Expression::BinaryExpression(op, left, right) => {
                 result.instructions.push(Instruction::PushRegisters.at(pos));
                 // TODO this implies right to left evaluation, double check with QBasic reference implementation
                 self._generate_expression_instructions(result, *right, only_const)?;
                 result.instructions.push(Instruction::CopyAToB.at(pos));
                 self._generate_expression_instructions(result, *left, only_const)?;
-                match op.as_ref() {
-                    Operand::Plus => result
-                        .instructions
-                        .push(Instruction::Plus.at(op.location())),
-                    Operand::Minus => result
-                        .instructions
-                        .push(Instruction::Minus.at(op.location())),
-                    Operand::LessThan => result
-                        .instructions
-                        .push(Instruction::LessThan.at(op.location())),
+                match op {
+                    Operand::Plus => result.instructions.push(Instruction::Plus.at(pos)),
+                    Operand::Minus => result.instructions.push(Instruction::Minus.at(pos)),
+                    Operand::LessThan => result.instructions.push(Instruction::LessThan.at(pos)),
                     Operand::LessOrEqualThan => result
                         .instructions
-                        .push(Instruction::LessOrEqualThan.at(op.location())),
+                        .push(Instruction::LessOrEqualThan.at(pos)),
                 }
                 result.instructions.push(Instruction::PopRegisters.at(pos));
                 Ok(())
             }
-            ExpressionNode::UnaryExpression(op, child) => {
-                match op.as_ref() {
+            Expression::UnaryExpression(op, child) => {
+                match op {
                     UnaryOperand::Not => {
                         self._generate_expression_instructions(result, *child, only_const)?;
-                        result
-                            .instructions
-                            .push(Instruction::NotA.at(op.location()));
+                        result.instructions.push(Instruction::NotA.at(pos));
                     }
                     UnaryOperand::Minus => {
                         self._generate_expression_instructions(result, *child, only_const)?;
-                        result
-                            .instructions
-                            .push(Instruction::NegateA.at(op.location()));
+                        result.instructions.push(Instruction::NegateA.at(pos));
                     }
                 }
                 Ok(())
