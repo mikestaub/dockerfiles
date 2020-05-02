@@ -1,4 +1,4 @@
-use super::{Name, QualifiedName, ResolveInto, ResolveIntoRef, TypeQualifier, TypeResolver};
+use super::{Name, NameTrait, QualifiedName, TypeQualifier};
 use crate::common::{CaseInsensitiveString, Locatable, Location};
 
 pub type NameNode = Locatable<Name>;
@@ -18,31 +18,17 @@ impl NameNode {
     }
 }
 
-impl AsRef<CaseInsensitiveString> for NameNode {
-    fn as_ref(&self) -> &CaseInsensitiveString {
-        let name: &Name = self.as_ref();
-        name.as_ref()
+impl<T: NameTrait> NameTrait for Locatable<T> {
+    fn bare_name(&self) -> &CaseInsensitiveString {
+        self.as_ref().bare_name()
     }
-}
 
-impl ResolveIntoRef<TypeQualifier> for NameNode {
-    fn resolve_into<T: TypeResolver>(&self, resolver: &T) -> TypeQualifier {
-        let name: &Name = self.as_ref();
-        name.resolve_into(resolver)
+    fn is_qualified(&self) -> bool {
+        self.as_ref().is_qualified()
     }
-}
 
-impl ResolveIntoRef<QualifiedName> for NameNode {
-    fn resolve_into<T: TypeResolver>(&self, resolver: &T) -> QualifiedName {
-        let name: &Name = self.as_ref();
-        name.resolve_into(resolver)
-    }
-}
-
-impl ResolveInto<QualifiedName> for NameNode {
-    fn resolve_into<T: TypeResolver>(self, resolver: &T) -> QualifiedName {
-        let name: Name = self.into();
-        name.resolve_into(resolver)
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
+        self.as_ref().opt_qualifier()
     }
 }
 

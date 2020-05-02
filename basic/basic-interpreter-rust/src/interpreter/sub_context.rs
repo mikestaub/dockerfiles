@@ -1,32 +1,14 @@
 use crate::common::CaseInsensitiveString;
-use crate::interpreter::subprogram_context::{
-    CmpQualifier, QualifiedImplementationNode, SubprogramContext,
-};
-use crate::parser::{BareNameNode, ResolveInto, TypeResolver};
+use crate::interpreter::subprogram_context::{QualifiedImplementationNode, SubprogramContext};
 
 //pub type QualifiedSubDeclarationNode = QualifiedDeclarationNode<CaseInsensitiveString>;
 pub type QualifiedSubImplementationNode = QualifiedImplementationNode<CaseInsensitiveString>;
 pub type SubContext = SubprogramContext<CaseInsensitiveString>;
 
-impl ResolveInto<CaseInsensitiveString> for BareNameNode {
-    fn resolve_into<T: TypeResolver>(self, _resolver: &T) -> CaseInsensitiveString {
-        self.into()
-    }
-}
-
-impl CmpQualifier<CaseInsensitiveString> for BareNameNode {
-    fn eq_qualifier<TR: TypeResolver>(
-        _left: &Self,
-        _right: &CaseInsensitiveString,
-        _resolver: &TR,
-    ) -> bool {
-        true
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
+    use crate::assert_pre_process_err;
     use crate::common::Location;
     use crate::interpreter::InterpreterError;
 
@@ -51,10 +33,7 @@ mod tests {
         DECLARE SUB Add(A, B, C)
         Add 1, 2
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Argument-count mismatch", Location::new(3, 9))
-        );
+        assert_pre_process_err!(program, "Argument-count mismatch", 3, 9);
     }
 
     #[test]
@@ -66,10 +45,7 @@ mod tests {
             PRINT A + B +C
         END SUB
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Argument-count mismatch", Location::new(4, 9))
-        );
+        assert_pre_process_err!(program, "Argument-count mismatch", 4, 9);
     }
 
     #[test]
@@ -84,10 +60,7 @@ mod tests {
             PRINT A + B
         END SUB
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Duplicate definition", Location::new(7, 9))
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 7, 9);
     }
 
     #[test]
@@ -97,10 +70,7 @@ mod tests {
         DECLARE SUB Add(A$, B)
         Add 1, 2
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Parameter type mismatch", Location::new(3, 25))
-        );
+        assert_pre_process_err!(program, "Parameter type mismatch", 3, 25);
     }
 
     #[test]
@@ -113,9 +83,6 @@ mod tests {
             PRINT B$
         END SUB
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Parameter type mismatch", Location::new(4, 20))
-        );
+        assert_pre_process_err!(program, "Parameter type mismatch", 4, 20);
     }
 }

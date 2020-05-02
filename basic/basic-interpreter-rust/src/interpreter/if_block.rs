@@ -1,20 +1,67 @@
-use super::{Interpreter, Result, Stdlib};
-use crate::interpreter::statement::StatementRunner;
+use super::{InstructionContext, Interpreter, Result, Stdlib};
 use crate::parser::IfBlockNode;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn if_block(&mut self, if_block_node: &IfBlockNode) -> Result<()> {
-        if self.evaluate_condition(&if_block_node.if_block)? {
-            self.run(&if_block_node.if_block.statements)
-        } else {
-            for else_if_block in &if_block_node.else_if_blocks {
-                if self.evaluate_condition(else_if_block)? {
-                    return self.run(&else_if_block.statements);
-                }
-            }
+    pub fn generate_if_block_instructions(
+        &self,
+        result: &mut InstructionContext,
+        if_block_statement: IfBlockNode,
+    ) -> Result<()> {
+        let IfBlockNode {
+            if_block,
+            else_if_blocks,
+            else_block,
+        } = if_block_statement;
+        let pos = if_block.pos;
 
-            self.run(&if_block_node.else_block)
+        // evaluate condition into A
+        self.generate_expression_instructions(result, if_block.condition)?;
+
+        // if false, jump to next one (first else-if or else or end-if)
+        let next_label = if else_if_blocks.len() > 0 {
+            "else-if-0"
+        } else if else_block.is_some() {
+            "else"
+        } else {
+            "end-if"
+        };
+        result.jump_if_false(next_label, pos);
+
+        // if true, run statements and jump out
+        self.generate_block_instructions(result, if_block.statements)?;
+        result.jump("end-if", pos);
+
+        for i in 0..else_if_blocks.len() {
+            let else_if_block = else_if_blocks[i].clone();
+            result.label(format!("else-if-{}", i), pos);
+
+            // evaluate condition into A
+            self.generate_expression_instructions(result, else_if_block.condition)?;
+
+            // if false, jump to next one (next else-if or else or end-if)
+            let next_label = if i + 1 < else_if_blocks.len() {
+                format!("else-if-{}", i + 1)
+            } else if else_block.is_some() {
+                format!("else")
+            } else {
+                format!("end-if")
+            };
+            result.jump_if_false(next_label, pos);
+
+            // if true, run statements and jump out
+            self.generate_block_instructions(result, else_if_block.statements)?;
+            result.jump("end-if", pos);
         }
+
+        match else_block {
+            Some(e) => {
+                result.label("else", pos);
+                self.generate_block_instructions(result, e)?;
+            }
+            None => (),
+        }
+        result.label("end-if", pos);
+        Ok(())
     }
 }
 

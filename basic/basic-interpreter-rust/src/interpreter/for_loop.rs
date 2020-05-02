@@ -1,127 +1,160 @@
-use super::{Interpreter, InterpreterError, Result, Stdlib, Variant};
-use crate::common::HasLocation;
-use crate::interpreter::context::VariableSetter;
-use crate::interpreter::statement::StatementRunner;
-use crate::parser::{ForLoopNode, NameNode, QualifiedName, ResolveIntoRef};
-use std::cmp::Ordering;
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib, Variant};
+use crate::common::*;
+use crate::parser::{BlockNode, ForLoopNode, Name};
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn for_loop(&mut self, for_loop: &ForLoopNode) -> Result<()> {
-        let start = self.evaluate_expression(&for_loop.lower_bound)?;
-        if !start.is_numeric() {
-            return Err(InterpreterError::new_with_pos(
-                "Start expression was not numeric",
-                for_loop.pos,
-            ));
-        }
+    pub fn generate_for_loop_instructions(
+        &self,
+        result: &mut InstructionContext,
+        f: ForLoopNode,
+    ) -> Result<()> {
+        let ForLoopNode {
+            variable_name,
+            lower_bound,
+            upper_bound,
+            step,
+            statements,
+            pos,
+            next_counter: _,
+        } = f;
+        let counter_var_name: Name = variable_name.consume().0;
 
-        let stop = self.evaluate_expression(&for_loop.upper_bound)?;
-        if !stop.is_numeric() {
-            return Err(InterpreterError::new_with_pos(
-                "Stop expression was not numeric",
-                for_loop.pos,
-            ));
-        }
+        // lower bound to A
+        self.generate_expression_instructions(result, lower_bound)?;
+        // A to variable
+        result
+            .instructions
+            .push(Instruction::Store(counter_var_name.clone()).at(pos));
+        // upper bound to A
+        self.generate_expression_instructions(result, upper_bound)?;
+        // A to hidden variable
+        result.store_temp_var("upper-bound", pos); // TODO dispose temp vars later
 
-        let counter_var_name = &for_loop.variable_name;
-        let statements = &for_loop.statements;
-        let step = match &for_loop.step {
-            Some(s) => self.evaluate_expression(s)?,
-            None => Variant::from(1),
-        };
-        if !step.is_numeric() {
-            return Err(InterpreterError::new_with_pos(
-                "Step expression was not numeric",
-                for_loop.pos,
-            ));
-        }
-
-        self._validate_next_counter(&for_loop)?;
-
-        let step_sign = step
-            .cmp(&Variant::from(0))
-            .map_err(|e| InterpreterError::new_with_pos(e, for_loop.pos))?;
-
-        match step_sign {
-            Ordering::Greater => {
-                self.context.set(counter_var_name, start)?;
-                while self._is_less_or_equal(counter_var_name, &stop)? {
-                    self.run(statements)?;
-                    self._inc_variable(counter_var_name.clone(), &step)?;
-                }
+        // load the step expression
+        match step {
+            Some(s) => {
+                let step_location = s.location();
+                // load 0 to B
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::VInteger(0)).at(pos));
+                result.instructions.push(Instruction::CopyAToB.at(pos));
+                // load step to A
+                self.generate_expression_instructions(result, s)?;
+                result.store_temp_var("step", pos);
+                // is step < 0 ?
+                result.instructions.push(Instruction::LessThan.at(pos));
+                result.jump_if_false("test-positive-or-zero", pos);
+                // negative step
+                self.generate_for_loop_instructions_positive_or_negative_step(
+                    result,
+                    counter_var_name.clone(),
+                    statements.clone(),
+                    false,
+                    pos,
+                )?;
+                // jump out
+                result.jump("out-of-for", pos);
+                // PositiveOrZero: ?
+                result.label("test-positive-or-zero", pos);
+                // need to load it again into A because the previous "LessThan" op overwrote A
+                result.copy_temp_var_to_a("step", pos);
+                // is step > 0 ?
+                result.instructions.push(Instruction::GreaterThan.at(pos));
+                result.jump_if_false("zero", pos);
+                // positive step
+                self.generate_for_loop_instructions_positive_or_negative_step(
+                    result,
+                    counter_var_name,
+                    statements,
+                    true,
+                    pos,
+                )?;
+                // jump out
+                result.jump("out-of-for", pos);
+                // Zero step
+                result.label("zero", pos);
+                result
+                    .instructions
+                    .push(Instruction::Throw(format!("Step cannot be zero")).at(step_location));
+                result.label("out-of-for", pos);
                 Ok(())
             }
-            Ordering::Less => {
-                self.context.set(counter_var_name, start)?;
-                while self._is_greater_or_equal(counter_var_name, &stop)? {
-                    self.run(statements)?;
-                    self._inc_variable(counter_var_name.clone(), &step)?;
-                }
+            None => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::VInteger(1)).at(pos));
+                result.store_temp_var("step", pos);
+                self.generate_for_loop_instructions_positive_or_negative_step(
+                    result,
+                    counter_var_name,
+                    statements,
+                    true,
+                    pos,
+                )?;
+                result.label("out-of-for", pos);
                 Ok(())
             }
-            Ordering::Equal => Err(InterpreterError::new_with_pos(
-                "Step cannot be zero",
-                for_loop.pos,
-            )),
         }
     }
 
-    fn _inc_variable(&mut self, variable_name: NameNode, step: &Variant) -> Result<()> {
-        let existing_value = self.context.get(&variable_name)?;
-        let new_value = existing_value
-            .plus(step)
-            .map_err(|e| InterpreterError::new_with_pos(e, variable_name.location()))?;
-        self.context.set(variable_name, new_value)
-    }
-
-    fn _is_less_or_equal(&self, variable_name: &NameNode, stop: &Variant) -> Result<bool> {
-        self.context
-            .get(variable_name)?
-            .cmp(&stop)
-            .map(|o| o != std::cmp::Ordering::Greater)
-            .map_err(|e| InterpreterError::new_with_pos(e, variable_name.location()))
-    }
-
-    fn _is_greater_or_equal(&self, variable_name: &NameNode, stop: &Variant) -> Result<bool> {
-        self.context
-            .get(variable_name)?
-            .cmp(&stop)
-            .map(|o| o != std::cmp::Ordering::Less)
-            .map_err(|e| InterpreterError::new_with_pos(e, variable_name.location()))
-    }
-
-    fn _validate_next_counter(&self, for_loop: &ForLoopNode) -> Result<()> {
-        if self._are_different_variable_opt(&for_loop.variable_name, &for_loop.next_counter) {
-            Err(InterpreterError::new_with_pos(
-                "NEXT without FOR",
-                for_loop.next_counter.as_ref().unwrap().location(),
-            ))
+    fn generate_for_loop_instructions_positive_or_negative_step(
+        &self,
+        result: &mut InstructionContext,
+        counter_var_name: Name,
+        statements: BlockNode,
+        is_positive: bool,
+        pos: Location,
+    ) -> Result<()> {
+        let loop_label = if is_positive {
+            "positive-loop"
         } else {
-            Ok(())
+            "negative-loop"
+        };
+        // loop point
+        result.label(loop_label, pos);
+        // upper bound to B
+        result.copy_temp_var_to_b("upper-bound", pos);
+        // counter to A
+        result
+            .instructions
+            .push(Instruction::CopyVarToA(counter_var_name.clone()).at(pos));
+        if is_positive {
+            result
+                .instructions
+                .push(Instruction::LessOrEqualThan.at(pos));
+        } else {
+            result
+                .instructions
+                .push(Instruction::GreaterOrEqualThan.at(pos));
         }
-    }
+        result.jump_if_false("out-of-for", pos);
+        self.generate_block_instructions(result, statements)?;
 
-    fn _are_different_variable_opt(&self, left: &NameNode, right: &Option<NameNode>) -> bool {
-        match right.as_ref() {
-            None => false,
-            Some(r) => self._are_different_variable(left, r),
-        }
-    }
+        // increment step
+        result
+            .instructions
+            .push(Instruction::CopyVarToA(counter_var_name.clone()).at(pos));
+        result.copy_temp_var_to_b("step", pos);
+        result.instructions.push(Instruction::Plus.at(pos));
+        result
+            .instructions
+            .push(Instruction::Store(counter_var_name).at(pos));
 
-    fn _are_different_variable(&self, left: &NameNode, right: &NameNode) -> bool {
-        let left_qualified_name: QualifiedName = left.resolve_into(&self.type_resolver);
-        let right_qualified_name: QualifiedName = right.resolve_into(&self.type_resolver);
-        left_qualified_name != right_qualified_name
+        // back to loop
+        result.jump(loop_label, pos);
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
-    use super::InterpreterError;
     use super::*;
     use crate::assert_has_variable;
+    use crate::assert_pre_process_err;
     use crate::common::Location;
+    use crate::interpreter::InterpreterError;
 
     #[test]
     fn test_simple_for_loop_untyped() {
@@ -208,6 +241,19 @@ mod tests {
     }
 
     #[test]
+    fn test_for_loop_with_zero_step() {
+        let input = "
+        FOR i% = 7 TO -6 STEP 0
+            PRINT i%
+        NEXT
+        ";
+        assert_eq!(
+            interpret_err(input),
+            InterpreterError::new_with_pos("Step cannot be zero", Location::new(2, 31))
+        );
+    }
+
+    #[test]
     fn test_for_loop_with_negative_step_minus_one() {
         let input = "
         FOR i% = 3 TO -3 STEP -1
@@ -251,10 +297,7 @@ mod tests {
             PRINT i%
         NEXT i
         ";
-        assert_eq!(
-            interpret_err(input),
-            InterpreterError::new_with_pos("NEXT without FOR", Location::new(4, 14))
-        );
+        assert_pre_process_err!(input, "NEXT without FOR", 4, 14);
     }
 
     #[test]

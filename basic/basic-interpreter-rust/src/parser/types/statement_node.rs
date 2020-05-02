@@ -1,5 +1,5 @@
 use super::{BareNameNode, ExpressionNode, NameNode};
-use crate::common::Location;
+use crate::common::{CaseInsensitiveString, Location};
 
 pub type BlockNode = Vec<StatementNode>;
 
@@ -11,6 +11,11 @@ pub enum StatementNode {
     Assignment(NameNode, ExpressionNode),
     While(ConditionalBlockNode),
     Const(NameNode, ExpressionNode, Location),
+    ErrorHandler(CaseInsensitiveString, Location),
+    Label(CaseInsensitiveString, Location),
+    GoTo(CaseInsensitiveString, Location),
+    // TODO remove out of here
+    InternalSetReturnValue(ExpressionNode),
 }
 
 #[derive(Clone, Debug, PartialEq)]

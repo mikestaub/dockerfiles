@@ -1,8 +1,10 @@
 mod common;
 mod interpreter;
 mod lexer;
+mod linter;
 mod parser;
 mod reader;
+
 use std::env;
 use std::fs::File;
 

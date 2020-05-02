@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::lexer::{Keyword, LexemeNode};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Cursor};
@@ -14,6 +15,7 @@ mod if_block;
 mod name;
 mod statement;
 mod sub_call;
+pub mod type_resolver_impl;
 mod types;
 mod while_wend;
 
@@ -63,7 +65,13 @@ impl<T: BufRead> Parser<T> {
                 | Keyword::DefStr => self.demand_def_type(k, pos),
                 Keyword::Function => self.demand_function_implementation(pos),
                 Keyword::Sub => self.demand_sub_implementation(pos),
-                Keyword::If | Keyword::For | Keyword::While | Keyword::Const => self
+                Keyword::If
+                | Keyword::Input
+                | Keyword::For
+                | Keyword::While
+                | Keyword::Const
+                | Keyword::On
+                | Keyword::GoTo => self
                     .demand_statement(next)
                     .map(|s| TopLevelTokenNode::Statement(s)),
                 _ => unexpected("Unexpected top level token", next),

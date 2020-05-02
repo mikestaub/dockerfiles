@@ -1,5 +1,5 @@
 use super::{ConditionalBlockNode, Parser, ParserError, StatementNode};
-use crate::common::Location;
+use crate::common::*;
 use crate::lexer::Keyword;
 use std::io::BufRead;
 

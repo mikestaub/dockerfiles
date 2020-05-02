@@ -1,104 +1,34 @@
-use super::{Interpreter, InterpreterError, Result, Stdlib, Variant};
-use crate::common::HasLocation;
-use crate::interpreter::built_in_subs;
-use crate::interpreter::context::VariableSetter;
-use crate::interpreter::user_defined_sub;
-use crate::parser::{BareNameNode, ExpressionNode, NameNode, ResolveIntoRef, TypeQualifier};
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use crate::common::*;
+use crate::interpreter::built_in_subs::is_built_in_sub;
+use crate::parser::{BareNameNode, ExpressionNode};
 
 impl<TStdlib: Stdlib> Interpreter<TStdlib> {
-    pub fn sub_call(&mut self, name_node: &BareNameNode, args: &Vec<ExpressionNode>) -> Result<()> {
-        let bare_name = name_node.as_ref();
-        if bare_name == "PRINT" {
-            self._do_print(args)
-        } else if bare_name == "INPUT" {
-            self._do_input(args)
-        } else if bare_name == "SYSTEM" {
-            self.stdlib.system();
-            Ok(())
-        } else if built_in_subs::supports_sub(name_node) {
-            let arg_values: Vec<Variant> = self.evaluate_arguments(args)?;
-            built_in_subs::call_sub(&mut self.stdlib, name_node, args, arg_values)
+    pub fn generate_sub_call_instructions(
+        &self,
+        result: &mut InstructionContext,
+        name_node: BareNameNode,
+        args: Vec<ExpressionNode>,
+    ) -> Result<()> {
+        let pos = name_node.location();
+        if is_built_in_sub(&name_node) {
+            self.generate_built_in_sub_call_instructions(result, name_node, args)?;
         } else {
-            if user_defined_sub::supports_sub(self, name_node) {
-                let arg_values: Vec<Variant> = self.evaluate_arguments(args)?;
-                user_defined_sub::call_sub(self, name_node, args, arg_values)
-            } else {
-                Err(InterpreterError::new_with_pos(
-                    format!("Unknown sub {}", bare_name),
-                    name_node.location(),
-                ))
-            }
+            let (name, pos) = name_node.consume();
+            let label = CaseInsensitiveString::new(format!(":sub:{}", name));
+            let sub_impl = self.sub_context.get_implementation(&name).unwrap();
+            self.generate_push_named_args_instructions(result, &sub_impl.parameters, args, pos)?;
+            result.instructions.push(Instruction::PushStack.at(pos));
+            let idx = result.instructions.len();
+            result
+                .instructions
+                .push(Instruction::PushRet(idx + 2).at(pos));
+            result
+                .instructions
+                .push(Instruction::UnresolvedJump(label).at(pos));
         }
-    }
-
-    fn _do_print(&mut self, args: &Vec<ExpressionNode>) -> Result<()> {
-        let mut strings: Vec<String> = vec![];
-        for a in args {
-            strings.push(self._do_print_map_arg(a)?);
-        }
-        self.stdlib.print(strings);
+        result.instructions.push(Instruction::PopStack.at(pos));
         Ok(())
-    }
-
-    fn _do_print_map_arg(&mut self, arg: &ExpressionNode) -> Result<String> {
-        let evaluated = self.evaluate_expression(arg)?;
-        Ok(evaluated.to_string())
-    }
-
-    fn _do_input(&mut self, args: &Vec<ExpressionNode>) -> Result<()> {
-        for a in args {
-            self._do_input_one(a)?;
-        }
-        Ok(())
-    }
-
-    fn _do_input_one(&mut self, expression: &ExpressionNode) -> Result<()> {
-        match expression {
-            ExpressionNode::VariableName(n) => self._do_input_one_var(n),
-            _ => Err(InterpreterError::new_with_pos(
-                format!("Expected variable name, was {:?}", expression),
-                expression.location(),
-            )),
-        }
-    }
-
-    fn _do_input_one_var(&mut self, var_name: &NameNode) -> Result<()> {
-        let raw_input: String = self
-            .stdlib
-            .input()
-            .map_err(|e| InterpreterError::new_with_pos(e.to_string(), var_name.location()))?;
-        let q: TypeQualifier = var_name.resolve_into(&self.type_resolver);
-        let variable_value = match q {
-            TypeQualifier::BangSingle => Variant::from(
-                parse_single_input(raw_input)
-                    .map_err(|e| InterpreterError::new_with_pos(e, var_name.location()))?,
-            ),
-            TypeQualifier::DollarString => Variant::from(raw_input),
-            TypeQualifier::PercentInteger => Variant::from(
-                parse_int_input(raw_input)
-                    .map_err(|e| InterpreterError::new_with_pos(e, var_name.location()))?,
-            ),
-            _ => unimplemented!(),
-        };
-        self.context.set(var_name, variable_value)
-    }
-}
-
-fn parse_single_input(s: String) -> std::result::Result<f32, String> {
-    if s.is_empty() {
-        Ok(0.0)
-    } else {
-        s.parse::<f32>()
-            .map_err(|e| format!("Could not parse {} as float: {}", s, e))
-    }
-}
-
-fn parse_int_input(s: String) -> std::result::Result<i32, String> {
-    if s.is_empty() {
-        Ok(0)
-    } else {
-        s.parse::<i32>()
-            .map_err(|e| format!("Could not parse {} as int: {}", s, e))
     }
 }
 
@@ -194,5 +124,50 @@ mod tests {
         "#;
         let interpreter = interpret(program);
         assert_eq!(interpreter.stdlib.get_env_var(&"FOO".to_string()), "BAR");
+    }
+
+    #[test]
+    fn test_interpret_sub_call_user_defined_literal_arg() {
+        let program = r#"
+        DECLARE SUB Hello(X)
+        A = 1
+        Hello 5
+        PRINT A
+        SUB Hello(X)
+            X = 42
+        END SUB
+        "#;
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["1"]);
+    }
+
+    #[test]
+    fn test_interpret_sub_call_user_defined_var_arg_is_by_ref() {
+        let program = r#"
+        DECLARE SUB Hello(X)
+        A = 1
+        Hello A
+        PRINT A
+        SUB Hello(X)
+            X = 42
+        END SUB
+        "#;
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["42"]);
+    }
+
+    #[test]
+    fn test_interpret_sub_call_user_defined_cannot_access_global_scope() {
+        let program = "
+        DECLARE SUB Hello
+        A = 1
+        Hello
+        PRINT A
+        SUB Hello
+            A = 42
+        END SUB
+        ";
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["1"]);
     }
 }

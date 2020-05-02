@@ -1,4 +1,4 @@
-use super::{HasQualifier, TypeQualifier};
+use super::{HasQualifier, NameTrait, TypeQualifier, TypeResolver};
 use crate::common::CaseInsensitiveString;
 use std::fmt::Display;
 
@@ -11,10 +11,6 @@ pub struct QualifiedName {
 impl QualifiedName {
     pub fn new(name: CaseInsensitiveString, qualifier: TypeQualifier) -> Self {
         QualifiedName { name, qualifier }
-    }
-
-    pub fn bare_name(&self) -> &CaseInsensitiveString {
-        &self.name
     }
 
     pub fn consume(self) -> (CaseInsensitiveString, TypeQualifier) {
@@ -31,5 +27,23 @@ impl HasQualifier for QualifiedName {
 impl Display for QualifiedName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", self.name, self.qualifier)
+    }
+}
+
+impl NameTrait for QualifiedName {
+    fn bare_name(&self) -> &CaseInsensitiveString {
+        &self.name
+    }
+
+    fn is_qualified(&self) -> bool {
+        true
+    }
+
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
+        Some(self.qualifier)
+    }
+
+    fn eq_resolve<T: TypeResolver, U: NameTrait>(&self, other: &U, resolver: &T) -> bool {
+        self == &other.to_qualified_name(resolver)
     }
 }

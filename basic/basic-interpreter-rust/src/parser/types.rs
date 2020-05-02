@@ -1,7 +1,7 @@
 mod bare_name_node;
-mod def_type_node;
+mod def_type;
 mod expression_node;
-mod letter_range_node;
+mod letter_range;
 mod name;
 mod name_node;
 mod qualified_name;
@@ -11,9 +11,9 @@ mod traits;
 mod type_qualifier;
 
 pub use self::bare_name_node::*;
-pub use self::def_type_node::*;
+pub use self::def_type::*;
 pub use self::expression_node::*;
-pub use self::letter_range_node::*;
+pub use self::letter_range::*;
 pub use self::name::*;
 pub use self::name_node::*;
 pub use self::qualified_name::*;

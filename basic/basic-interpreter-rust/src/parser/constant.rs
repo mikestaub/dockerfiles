@@ -1,5 +1,5 @@
 use super::{Parser, ParserError, StatementNode};
-use crate::common::Location;
+use crate::common::*;
 use std::io::BufRead;
 
 impl<T: BufRead> Parser<T> {

@@ -1,7 +1,7 @@
 use super::{
     unexpected, ExpressionNode, ForLoopNode, NameNode, Parser, ParserError, StatementNode,
 };
-use crate::common::Location;
+use crate::common::*;
 use crate::lexer::{Keyword, LexemeNode};
 use std::io::BufRead;
 

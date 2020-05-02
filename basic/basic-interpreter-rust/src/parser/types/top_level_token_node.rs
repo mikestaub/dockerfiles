@@ -1,4 +1,4 @@
-use super::{BareNameNode, BlockNode, DefTypeNode, NameNode, StatementNode};
+use super::{BareNameNode, BlockNode, DefType, NameNode, StatementNode};
 use crate::common::Location;
 
 pub type ProgramNode = Vec<TopLevelTokenNode>;
@@ -6,7 +6,7 @@ pub type ProgramNode = Vec<TopLevelTokenNode>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TopLevelTokenNode {
     /// A default type definition, e.g. `DEFINT A-Z.`
-    DefType(DefTypeNode),
+    DefType(DefType, Location),
 
     /// A function declaration, e.g. `DECLARE FUNCTION Add(A, B)`
     FunctionDeclaration(NameNode, Vec<NameNode>, Location),

@@ -1,9 +1,25 @@
 use crate::common::Location;
+use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::variant::Variant;
-use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
+use crate::interpreter::{Instruction, Interpreter, InterpreterError, Result, Stdlib};
 use crate::parser::{Name, NameNode, Parser};
 use std::collections::HashMap;
 use std::fs::File;
+
+pub fn generate_instructions<T>(input: T) -> Vec<Instruction>
+where
+    T: AsRef<[u8]>,
+{
+    let mut parser = Parser::from(input);
+    let program = parser.parse().unwrap();
+    let mut interpreter = Interpreter::new(MockStdlib::new());
+    interpreter
+        .generate_instructions(program)
+        .unwrap()
+        .into_iter()
+        .map(|x| x.consume().0)
+        .collect()
+}
 
 pub fn interpret<T>(input: T) -> Interpreter<MockStdlib>
 where
@@ -107,10 +123,12 @@ impl Stdlib for MockStdlib {
 }
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn get_variable_str(&self, name: &str) -> Result<&Variant> {
+    pub fn get_variable_str(&self, name: &str) -> Result<Variant> {
         let pos = Location::start();
         let n = Name::from(name);
-        self.context.get(&NameNode::new(n, pos))
+        self.context_ref()
+            .get_r_value(&NameNode::new(n, pos))
+            .map(|x| x.unwrap())
     }
 }
 
@@ -119,7 +137,7 @@ macro_rules! assert_has_variable {
     ($int:expr, $name:expr, $expected_value:expr) => {
         assert_eq!(
             $int.get_variable_str($name).unwrap(),
-            &Variant::from($expected_value)
+            Variant::from($expected_value)
         );
     };
 }
@@ -156,8 +174,12 @@ impl AssignmentBuilder {
         } else {
             let interpreter = interpret(&self.program);
             assert_eq!(
-                interpreter.context.get(&self.variable_name_node).unwrap(),
-                &Variant::from(expected_value)
+                interpreter
+                    .context_ref()
+                    .get_r_value(&self.variable_name_node)
+                    .unwrap()
+                    .unwrap(),
+                Variant::from(expected_value)
             );
         }
     }
@@ -187,4 +209,30 @@ where
     let input = format!("INPUT {}", variable_name);
     let interpreter = interpret_with_stdlib(input, stdlib);
     assert_has_variable!(interpreter, variable_name, expected_value);
+}
+
+#[macro_export]
+macro_rules! assert_err {
+    ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
+        assert_eq!(
+            interpret_err($program),
+            InterpreterError::new_with_pos(
+                $expected_msg,
+                Location::new($expected_row, $expected_col)
+            )
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! assert_pre_process_err {
+    ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
+        assert_eq!(
+            interpret_err($program),
+            InterpreterError::new_with_pos(
+                format!("[P] {}", $expected_msg),
+                Location::new($expected_row, $expected_col)
+            )
+        );
+    };
 }

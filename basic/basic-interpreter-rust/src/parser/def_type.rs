@@ -1,5 +1,5 @@
 use super::{
-    unexpected, DefTypeNode, LetterRangeNode, Parser, ParserError, TopLevelTokenNode, TypeQualifier,
+    unexpected, DefType, LetterRange, Parser, ParserError, TopLevelTokenNode, TypeQualifier,
 };
 use crate::common::Location;
 use crate::lexer::{Keyword, LexemeNode};
@@ -24,7 +24,7 @@ impl<T: BufRead> Parser<T> {
         };
 
         self.read_demand_whitespace("Expected whitespace after DEF* keyword")?;
-        let mut ranges: Vec<LetterRangeNode> = vec![];
+        let mut ranges: Vec<LetterRange> = vec![];
         const STATE_INITIAL: u8 = 0;
         const STATE_FIRST_LETTER: u8 = 1;
         const STATE_DASH: u8 = 2;
@@ -43,10 +43,10 @@ impl<T: BufRead> Parser<T> {
                     } else if state == STATE_COMMA {
                         return unexpected("Expected letter range after comma", next);
                     } else if state == STATE_FIRST_LETTER {
-                        ranges.push(LetterRangeNode::Single(first_letter));
+                        ranges.push(LetterRange::Single(first_letter));
                         state = STATE_EOL;
                     } else if state == STATE_SECOND_LETTER {
-                        ranges.push(LetterRangeNode::Range(first_letter, second_letter));
+                        ranges.push(LetterRange::Range(first_letter, second_letter));
                         state = STATE_EOL;
                     } else {
                         return unexpected("Expected at least one letter range", next);
@@ -78,10 +78,10 @@ impl<T: BufRead> Parser<T> {
                 }
                 LexemeNode::Symbol(',', _) => {
                     if state == STATE_FIRST_LETTER {
-                        ranges.push(LetterRangeNode::Single(first_letter));
+                        ranges.push(LetterRange::Single(first_letter));
                         state = STATE_COMMA;
                     } else if state == STATE_SECOND_LETTER {
-                        ranges.push(LetterRangeNode::Range(first_letter, second_letter));
+                        ranges.push(LetterRange::Range(first_letter, second_letter));
                         state = STATE_COMMA;
                     } else {
                         return unexpected("Syntax error", next);
@@ -90,9 +90,10 @@ impl<T: BufRead> Parser<T> {
                 _ => return unexpected("Syntax error", next),
             }
         }
-        Ok(TopLevelTokenNode::DefType(DefTypeNode::new(
-            qualifier, ranges, pos,
-        )))
+        Ok(TopLevelTokenNode::DefType(
+            DefType::new(qualifier, ranges),
+            pos,
+        ))
     }
 }
 
@@ -106,7 +107,7 @@ mod tests {
     macro_rules! assert_def_type {
         ($input:expr, $expected_qualifier:expr, $expected_ranges:expr) => {
             match parse($input).demand_single() {
-                TopLevelTokenNode::DefType(x) => {
+                TopLevelTokenNode::DefType(x, _) => {
                     assert_eq!(x.qualifier(), $expected_qualifier);
                     assert_eq!(x.ranges(), &$expected_ranges);
                 }
@@ -120,7 +121,7 @@ mod tests {
         assert_def_type!(
             "DEFINT A-Z",
             TypeQualifier::PercentInteger,
-            vec![LetterRangeNode::Range('A', 'Z')]
+            vec![LetterRange::Range('A', 'Z')]
         );
     }
 
@@ -129,7 +130,7 @@ mod tests {
         assert_def_type!(
             "DEFINT A",
             TypeQualifier::PercentInteger,
-            vec![LetterRangeNode::Single('A')]
+            vec![LetterRange::Single('A')]
         );
     }
 
@@ -139,9 +140,9 @@ mod tests {
             "DEFSTR A, B,C  ",
             TypeQualifier::DollarString,
             vec![
-                LetterRangeNode::Single('A'),
-                LetterRangeNode::Single('B'),
-                LetterRangeNode::Single('C')
+                LetterRange::Single('A'),
+                LetterRange::Single('B'),
+                LetterRange::Single('C')
             ]
         );
     }
@@ -152,9 +153,9 @@ mod tests {
             "DEFLNG A-I, K-W, Z",
             TypeQualifier::AmpersandLong,
             vec![
-                LetterRangeNode::Range('A', 'I'),
-                LetterRangeNode::Range('K', 'W'),
-                LetterRangeNode::Single('Z')
+                LetterRange::Range('A', 'I'),
+                LetterRange::Range('K', 'W'),
+                LetterRange::Single('Z')
             ]
         );
     }

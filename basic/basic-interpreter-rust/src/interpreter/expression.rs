@@ -1,106 +1,122 @@
-use super::variant::{V_FALSE, V_TRUE};
-use super::{Interpreter, InterpreterError, Result, Stdlib, Variant};
-use crate::common::HasLocation;
-use crate::parser::{ExpressionNode, Operand, OperandNode, UnaryOperand, UnaryOperandNode};
+use super::{
+    Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
+};
+use crate::common::{AtLocation, HasLocation};
+use crate::parser::*;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn evaluate_expression(&mut self, e: &ExpressionNode) -> Result<Variant> {
-        self._evaluate_expression(e, false)
+    pub fn generate_expression_instructions(
+        &self,
+        result: &mut InstructionContext,
+        e: ExpressionNode,
+    ) -> Result<()> {
+        self._generate_expression_instructions(result, e, false)
     }
 
-    pub fn evaluate_const_expression(&mut self, e: &ExpressionNode) -> Result<Variant> {
-        self._evaluate_expression(e, true)
+    pub fn generate_const_expression_instructions(
+        &self,
+        result: &mut InstructionContext,
+        e: ExpressionNode,
+    ) -> Result<()> {
+        self._generate_expression_instructions(result, e, true)
     }
 
-    fn _evaluate_expression(
-        &mut self,
-        e: &ExpressionNode,
-        only_constants: bool,
-    ) -> Result<Variant> {
+    fn _generate_expression_instructions(
+        &self,
+        result: &mut InstructionContext,
+        e: ExpressionNode,
+        only_const: bool,
+    ) -> Result<()> {
+        let pos = e.location();
         match e {
-            ExpressionNode::SingleLiteral(n, _) => Ok(Variant::from(*n)),
-            ExpressionNode::DoubleLiteral(n, _) => Ok(Variant::from(*n)),
-            ExpressionNode::StringLiteral(s, _) => Ok(Variant::from(s)),
-            ExpressionNode::IntegerLiteral(i, _) => Ok(Variant::from(*i)),
-            ExpressionNode::LongLiteral(i, _) => Ok(Variant::from(*i)),
-            ExpressionNode::VariableName(n) => {
-                if only_constants {
-                    self.context.get_const(n).map(|x| x.clone())
+            ExpressionNode::SingleLiteral(s, _) => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                Ok(())
+            }
+            ExpressionNode::DoubleLiteral(s, _) => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                Ok(())
+            }
+            ExpressionNode::StringLiteral(s, _) => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                Ok(())
+            }
+            ExpressionNode::IntegerLiteral(s, _) => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                Ok(())
+            }
+            ExpressionNode::LongLiteral(s, _) => {
+                result
+                    .instructions
+                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                Ok(())
+            }
+            ExpressionNode::VariableName(name_node) => {
+                if !only_const || result.constants.contains(name_node.bare_name()) {
+                    result
+                        .instructions
+                        .push(Instruction::CopyVarToA(name_node.consume().0).at(pos));
+                    Ok(())
                 } else {
-                    self.context.get_or_default(n)
+                    Err(InterpreterError::new_with_pos("Invalid constant", pos))
                 }
             }
             ExpressionNode::FunctionCall(n, args) => {
-                if only_constants {
-                    Err(InterpreterError::new_with_pos(
-                        "Invalid constant",
-                        e.location(),
-                    ))
+                if only_const {
+                    Err(InterpreterError::new_with_pos("Invalid constant", pos))
                 } else {
-                    self.evaluate_function_call(n, args)
+                    self.generate_function_call_instructions(result, n, args)?;
+                    Ok(())
                 }
             }
             ExpressionNode::BinaryExpression(op, left, right) => {
-                self._evaluate_binary_expression(op, left, right, only_constants)
+                result.instructions.push(Instruction::PushRegisters.at(pos));
+                // TODO this implies right to left evaluation, double check with QBasic reference implementation
+                self._generate_expression_instructions(result, *right, only_const)?;
+                result.instructions.push(Instruction::CopyAToB.at(pos));
+                self._generate_expression_instructions(result, *left, only_const)?;
+                match op.as_ref() {
+                    Operand::Plus => result
+                        .instructions
+                        .push(Instruction::Plus.at(op.location())),
+                    Operand::Minus => result
+                        .instructions
+                        .push(Instruction::Minus.at(op.location())),
+                    Operand::LessThan => result
+                        .instructions
+                        .push(Instruction::LessThan.at(op.location())),
+                    Operand::LessOrEqualThan => result
+                        .instructions
+                        .push(Instruction::LessOrEqualThan.at(op.location())),
+                }
+                result.instructions.push(Instruction::PopRegisters.at(pos));
+                Ok(())
             }
             ExpressionNode::UnaryExpression(op, child) => {
-                self._evaluate_unary_expression(op, child, only_constants)
-            }
-        }
-    }
-
-    fn _evaluate_binary_expression(
-        &mut self,
-        op: &OperandNode,
-        left: &Box<ExpressionNode>,
-        right: &Box<ExpressionNode>,
-        only_constants: bool,
-    ) -> Result<Variant> {
-        let left_var: Variant = self._evaluate_expression(left, only_constants)?;
-        let right_var: Variant = self._evaluate_expression(right, only_constants)?;
-        match op.as_ref() {
-            Operand::LessOrEqualThan => {
-                let cmp = left_var
-                    .cmp(&right_var)
-                    .map_err(|e| InterpreterError::new_with_pos(e, op.location()))?;
-                match cmp {
-                    std::cmp::Ordering::Less | std::cmp::Ordering::Equal => Ok(V_TRUE),
-                    std::cmp::Ordering::Greater => Ok(V_FALSE),
+                match op.as_ref() {
+                    UnaryOperand::Not => {
+                        self._generate_expression_instructions(result, *child, only_const)?;
+                        result
+                            .instructions
+                            .push(Instruction::NotA.at(op.location()));
+                    }
+                    UnaryOperand::Minus => {
+                        self._generate_expression_instructions(result, *child, only_const)?;
+                        result
+                            .instructions
+                            .push(Instruction::NegateA.at(op.location()));
+                    }
                 }
+                Ok(())
             }
-            Operand::LessThan => {
-                let cmp = left_var
-                    .cmp(&right_var)
-                    .map_err(|e| InterpreterError::new_with_pos(e, op.location()))?;
-                match cmp {
-                    std::cmp::Ordering::Less => Ok(V_TRUE),
-                    _ => Ok(V_FALSE),
-                }
-            }
-            Operand::Plus => left_var
-                .plus(&right_var)
-                .map_err(|e| InterpreterError::new_with_pos(e, op.location())),
-            Operand::Minus => left_var
-                .minus(&right_var)
-                .map_err(|e| InterpreterError::new_with_pos(e, op.location())),
-        }
-    }
-
-    fn _evaluate_unary_expression(
-        &mut self,
-        op: &UnaryOperandNode,
-        child: &Box<ExpressionNode>,
-        only_constants: bool,
-    ) -> Result<Variant> {
-        let child_var: Variant = self._evaluate_expression(child, only_constants)?;
-        match op.as_ref() {
-            // UnaryOperand::Plus => Ok(child_var),
-            UnaryOperand::Minus => child_var
-                .negate()
-                .map_err(|e| InterpreterError::new_with_pos(e, op.location())),
-            UnaryOperand::Not => child_var
-                .unary_not()
-                .map_err(|e| InterpreterError::new_with_pos(e, op.location())),
         }
     }
 }
@@ -185,6 +201,36 @@ mod tests {
                 interpret_err("X& = 1 + \"hello\""),
                 InterpreterError::new_with_pos("Type mismatch", Location::new(1, 8))
             );
+        }
+
+        #[test]
+        fn test_function_call_plus_literal() {
+            let program = r#"
+            DECLARE FUNCTION Sum(A, B)
+
+            PRINT Sum(1, 2) + 1
+
+            FUNCTION Sum(A, B)
+                Sum = A + B
+            END FUNCTION
+            "#;
+            let interpreter = interpret(program);
+            assert_eq!(interpreter.stdlib.output, vec!["4"]);
+        }
+
+        #[test]
+        fn test_literal_plus_function_call() {
+            let program = r#"
+            DECLARE FUNCTION Sum(A, B)
+
+            PRINT 1 + Sum(1, 2)
+
+            FUNCTION Sum(A, B)
+                Sum = A + B
+            END FUNCTION
+            "#;
+            let interpreter = interpret(program);
+            assert_eq!(interpreter.stdlib.output, vec!["4"]);
         }
     }
 

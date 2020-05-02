@@ -1,12 +1,27 @@
-use super::{Interpreter, Result, Stdlib};
-use crate::interpreter::statement::StatementRunner;
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use crate::common::*;
 use crate::parser::ConditionalBlockNode;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn while_wend(&mut self, while_wend_block: &ConditionalBlockNode) -> Result<()> {
-        while self.evaluate_condition(while_wend_block)? {
-            self.run(&while_wend_block.statements)?;
-        }
+    pub fn generate_while_instructions(
+        &self,
+        result: &mut InstructionContext,
+        w: ConditionalBlockNode,
+    ) -> Result<()> {
+        let pos = w.pos;
+        let start_idx = result.instructions.len();
+        // evaluate condition into register A
+        self.generate_expression_instructions(result, w.condition)?;
+        let jump_if_false_idx = result.instructions.len();
+        result
+            .instructions
+            .push(Instruction::JumpIfFalse(0).at(pos)); // will determine soon
+        self.generate_block_instructions(result, w.statements)?;
+        result
+            .instructions
+            .push(Instruction::Jump(start_idx).at(pos));
+        let exit_idx = result.instructions.len();
+        result.instructions[jump_if_false_idx] = Instruction::JumpIfFalse(exit_idx).at(pos); // patch jump statement with correct index
         Ok(())
     }
 }

@@ -1,64 +1,115 @@
-use super::{Interpreter, Result, Stdlib, Variant};
-use crate::interpreter::built_in_functions;
-use crate::interpreter::user_defined_function;
-use crate::parser::{ExpressionNode, NameNode};
-
-mod undefined_function {
-    use crate::common::HasLocation;
-    use crate::interpreter::{InterpreterError, Result, Variant};
-    use crate::parser::{ExpressionNode, NameNode, TypeResolver};
-
-    pub fn call<TR: TypeResolver>(
-        resolver: &TR,
-        function_name: &NameNode,
-        args: &Vec<ExpressionNode>,
-        arg_values: Vec<Variant>,
-    ) -> Result<Variant> {
-        for i in 0..arg_values.len() {
-            let arg_value = &arg_values[i];
-            let arg_node = &args[i];
-            match arg_value {
-                Variant::VString(_) => {
-                    return Err(InterpreterError::new_with_pos(
-                        "Type mismatch",
-                        arg_node.location(),
-                    ))
-                }
-                _ => (),
-            }
-        }
-        Ok(Variant::default_variant(
-            resolver.resolve(function_name.as_ref()),
-        ))
-    }
-}
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use crate::common::*;
+use crate::interpreter::built_in_functions::is_built_in_function;
+use crate::parser::*;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn evaluate_function_call(
-        &mut self,
-        function_name: &NameNode,
-        args: &Vec<ExpressionNode>,
-    ) -> Result<Variant> {
-        let arg_values: Vec<Variant> = self.evaluate_arguments(args)?;
+    pub fn generate_function_call_instructions(
+        &self,
+        result: &mut InstructionContext,
+        function_name: NameNode,
+        args: Vec<ExpressionNode>,
+    ) -> Result<()> {
+        let pos = function_name.location();
 
-        if built_in_functions::supports_function(function_name) {
-            built_in_functions::call_function(&self.stdlib, function_name, args, arg_values)
+        if is_built_in_function(&function_name) {
+            self.generate_built_in_function_call_instructions(result, function_name, args)?;
         } else {
-            if user_defined_function::supports_function(self, function_name) {
-                user_defined_function::call_function(self, function_name, args, arg_values)
-            } else {
-                undefined_function::call(&self.type_resolver, function_name, args, arg_values)
+            let (name, pos) = function_name.consume();
+            let bare_name: &CaseInsensitiveString = name.bare_name();
+            match self.function_context.get_implementation(bare_name) {
+                Some(function_impl) => {
+                    let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
+
+                    self.generate_push_named_args_instructions(
+                        result,
+                        &function_impl.parameters,
+                        args,
+                        pos,
+                    )?;
+                    result.instructions.push(Instruction::PushStack.at(pos));
+
+                    let idx = result.instructions.len();
+                    result
+                        .instructions
+                        .push(Instruction::PushRet(idx + 2).at(pos));
+                    result
+                        .instructions
+                        .push(Instruction::UnresolvedJump(label).at(pos));
+                    // TODO provide fallback if variant is missing
+                }
+                None => {
+                    // undefined function is okay as long as no parameter is a string
+                    self.generate_built_in_function_call_instructions(
+                        result,
+                        Name::Typed(QualifiedName::new(
+                            CaseInsensitiveString::new("_Undefined_".to_string()),
+                            TypeQualifier::PercentInteger,
+                        ))
+                        .at(pos),
+                        args,
+                    )?;
+                }
             }
         }
+        result.instructions.push(Instruction::PopStack.at(pos));
+        result.instructions.push(Instruction::CopyResultToA.at(pos));
+        Ok(())
     }
 
-    pub fn evaluate_arguments(&mut self, args: &Vec<ExpressionNode>) -> Result<Vec<Variant>> {
-        let mut result: Vec<Variant> = vec![];
-        for arg in args.iter() {
-            let variable_value = self.evaluate_expression(arg)?;
-            result.push(variable_value);
+    pub fn generate_push_named_args_instructions(
+        &self,
+        result: &mut InstructionContext,
+        param_names: &Vec<QualifiedName>,
+        expressions: Vec<ExpressionNode>,
+        pos: Location,
+    ) -> Result<()> {
+        // TODO validate arg count and param count match
+        // TODO validate cast if by val, same type if by ref
+        result.instructions.push(Instruction::PreparePush.at(pos));
+        for (n, e) in param_names.iter().zip(expressions.into_iter()) {
+            let pos = e.location();
+            match e {
+                ExpressionNode::VariableName(v_name) => {
+                    result.instructions.push(
+                        Instruction::SetNamedRefParam(n.clone(), v_name.as_ref().clone()).at(pos),
+                    );
+                }
+                _ => {
+                    self.generate_expression_instructions(result, e)?;
+                    result
+                        .instructions
+                        .push(Instruction::SetNamedValParam(n.clone()).at(pos));
+                }
+            }
         }
-        Ok(result)
+        Ok(())
+    }
+
+    pub fn generate_push_unnamed_args_instructions(
+        &self,
+        result: &mut InstructionContext,
+        expressions: Vec<ExpressionNode>,
+        pos: Location,
+    ) -> Result<()> {
+        result.instructions.push(Instruction::PreparePush.at(pos));
+        for e in expressions.into_iter() {
+            let pos = e.location();
+            match e {
+                ExpressionNode::VariableName(v_name) => {
+                    result
+                        .instructions
+                        .push(Instruction::PushUnnamedRefParam(v_name.as_ref().clone()).at(pos));
+                }
+                _ => {
+                    self.generate_expression_instructions(result, e)?;
+                    result
+                        .instructions
+                        .push(Instruction::PushUnnamedValParam.at(pos));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -66,8 +117,9 @@ impl<S: Stdlib> Interpreter<S> {
 mod tests {
     use super::super::test_utils::*;
     use crate::assert_has_variable;
+    use crate::assert_pre_process_err;
     use crate::common::Location;
-    use crate::interpreter::{InterpreterError, Stdlib, Variant};
+    use crate::interpreter::{InterpreterError, Variant};
 
     #[test]
     fn test_function_call_declared_and_implemented() {
@@ -88,10 +140,7 @@ mod tests {
         DECLARE FUNCTION Add(A, B)
         X = Add(1, 2)
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Subprogram not defined", Location::new(2, 9))
-        );
+        assert_pre_process_err!(program, "Subprogram not defined", 2, 9);
     }
 
     #[test]
@@ -136,7 +185,8 @@ mod tests {
         ";
         assert_eq!(
             interpret_err(program),
-            InterpreterError::new_with_pos("Type mismatch", Location::new(2, 17))
+            // TODO 13 should be 17 with an additional linter
+            InterpreterError::new_with_pos("Type mismatch", Location::new(2, 13))
         );
     }
 
@@ -182,15 +232,71 @@ mod tests {
     }
 
     #[test]
-    fn test_function_call_environ() {
+    fn test_interpret_function_call_user_defined_literal_arg() {
         let program = r#"
-        X$ = ENVIRON$("abc")
-        Y$ = ENVIRON$("def")
+        DECLARE FUNCTION Hello(X)
+        A = 1
+        B = Hello(A + 1)
+        PRINT A
+        PRINT B
+        FUNCTION Hello(X)
+            X = X + 1
+            Hello = X + 1
+        END FUNCTION
         "#;
-        let mut stdlib = MockStdlib::new();
-        stdlib.set_env_var("abc".to_string(), "foo".to_string());
-        let interpreter = interpret_with_stdlib(program, stdlib);
-        assert_has_variable!(interpreter, "X$", "foo");
-        assert_has_variable!(interpreter, "Y$", "");
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["1", "4"]);
+    }
+
+    #[test]
+    fn test_interpret_function_call_user_defined_var_arg_is_by_ref() {
+        let program = r#"
+        DECLARE FUNCTION Hello(X)
+        A = 1
+        B = Hello(A)
+        PRINT A
+        PRINT B
+        FUNCTION Hello(X)
+            X = X + 1
+            Hello = X + 1
+        END FUNCTION
+        "#;
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["2", "3"]);
+    }
+
+    #[test]
+    fn test_interpret_function_call_user_defined_var_arg_is_by_ref_assign_to_self() {
+        let program = r#"
+        DECLARE FUNCTION Hello(X)
+        A = 1
+        A = Hello(A)
+        PRINT A
+        FUNCTION Hello(X)
+            X = X + 1
+            Hello = X + 1
+        END FUNCTION
+        "#;
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["3"]);
+    }
+
+    #[test]
+    fn test_recursive_function() {
+        let program = r#"
+        DECLARE FUNCTION Sum(X)
+
+        PRINT Sum(3)
+
+        FUNCTION Sum(X)
+            IF 1 < X THEN
+                Sum = Sum(X - 1) + X
+            ELSE
+                Sum = 1
+            END IF
+        END FUNCTION
+        "#;
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["6"]);
     }
 }

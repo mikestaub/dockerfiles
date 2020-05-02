@@ -1,27 +1,35 @@
-use super::{Interpreter, InterpreterError, Result, Stdlib, Variant};
-use crate::common::HasLocation;
-use crate::interpreter::casting::cast;
-use crate::parser::{ExpressionNode, HasQualifier, Name, NameNode};
+use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use crate::common::*;
+use crate::parser::{ExpressionNode, Name, NameNode};
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn handle_const(&mut self, left: &NameNode, right: &ExpressionNode) -> Result<()> {
-        let value: Variant = self.evaluate_const_expression(right)?;
-        let name: &Name = left.as_ref();
+    pub fn generate_const_instructions(
+        &self,
+        result: &mut InstructionContext,
+        left: NameNode,
+        right: ExpressionNode,
+    ) -> Result<()> {
+        let (name, pos) = left.consume();
+        self.generate_const_expression_instructions(result, right)?;
         match name {
             Name::Bare(bare_name) => {
-                self.context
-                    .set_const(bare_name.clone(), value, left.location())
+                result
+                    .instructions
+                    .push(Instruction::StoreConst(bare_name.clone()).at(pos));
+                result.constants.push(bare_name);
             }
             Name::Typed(qualified_name) => {
-                let casted_value = cast(value, qualified_name.qualifier())
-                    .map_err(|msg| InterpreterError::new_with_pos(msg, left.location()))?;
-                self.context.set_const(
-                    qualified_name.bare_name().clone(),
-                    casted_value,
-                    left.location(),
-                )
+                let (bare_name, qualifier) = qualified_name.consume();
+                result
+                    .instructions
+                    .push(Instruction::Cast(qualifier).at(pos));
+                result
+                    .instructions
+                    .push(Instruction::StoreConst(bare_name.clone()).at(pos));
+                result.constants.push(bare_name);
             }
         }
+        Ok(())
     }
 }
 
@@ -199,6 +207,7 @@ mod tests {
 
     mod expressions {
         use super::*;
+        use crate::assert_pre_process_err;
 
         #[test]
         fn binary_plus() {
@@ -250,10 +259,7 @@ mod tests {
             CONST X = Add(1, 2)
             PRINT X
             "#;
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Invalid constant", Location::new(2, 23))
-            );
+            assert_pre_process_err!(program, "Invalid constant", 2, 23);
         }
 
         #[test]
@@ -285,6 +291,7 @@ mod tests {
                 PRINT X
             END SUB
             "#;
+
             let interpreter = interpret(program);
             assert_eq!(interpreter.stdlib.output, vec!["42"]);
         }

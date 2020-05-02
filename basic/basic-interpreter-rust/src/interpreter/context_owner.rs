@@ -1,58 +1,45 @@
-use super::{Interpreter, Result, Stdlib, Variant};
-use crate::common::Location;
-use crate::interpreter::context::{Context, VariableSetter};
+use super::{Interpreter, Stdlib};
+use crate::interpreter::context::Context;
 use crate::interpreter::type_resolver_impl::TypeResolverImpl;
-use crate::parser::{Name, NameNode, QualifiedName};
 
 /// Represents the owner of a variable context.
 pub trait ContextOwner {
-    /// Pushes a new context as a result of a sub call.
-    fn push_sub(&mut self);
+    /// Pushes a new context as a result of a sub or function call.
+    fn push_args_context(&mut self);
 
-    /// Pushes a new context as a result of a function call.
-    fn push_function(&mut self, result_name: QualifiedName);
+    fn swap_args_with_sub_context(&mut self);
 
     /// Pops a context.
     fn pop(&mut self);
 
-    fn populate(
-        &mut self,
-        names: Vec<QualifiedName>,
-        values: Vec<Variant>,
-        call_pos: Location,
-    ) -> Result<()>;
-
     fn context_ref(&self) -> &Context<TypeResolverImpl>;
+    fn context_mut(&mut self) -> &mut Context<TypeResolverImpl>;
 }
 
 impl<S: Stdlib> ContextOwner for Interpreter<S> {
-    fn push_function(&mut self, result_name: QualifiedName) {
-        self.context = std::mem::take(&mut self.context).push_function(result_name);
+    fn push_args_context(&mut self) {
+        self.context = self.context.take().map(|x| x.push_args_context());
     }
 
-    fn push_sub(&mut self) {
-        self.context = std::mem::take(&mut self.context).push_sub();
+    fn swap_args_with_sub_context(&mut self) {
+        self.context = self.context.take().map(|x| x.swap_args_with_sub_context());
     }
 
     fn pop(&mut self) {
-        self.context = std::mem::take(&mut self.context).pop();
-    }
-
-    fn populate(
-        &mut self,
-        names: Vec<QualifiedName>,
-        values: Vec<Variant>,
-        call_pos: Location,
-    ) -> Result<()> {
-        for x in names.into_iter().zip(values.into_iter()) {
-            let (qualified_name, value) = x;
-            let name_node = NameNode::new(Name::Typed(qualified_name), call_pos);
-            self.context.set(name_node, value)?;
-        }
-        Ok(())
+        self.context = self.context.take().map(|x| x.pop());
     }
 
     fn context_ref(&self) -> &Context<TypeResolverImpl> {
-        &self.context
+        match &self.context {
+            Some(x) => x,
+            None => panic!("stack underflow"),
+        }
+    }
+
+    fn context_mut(&mut self) -> &mut Context<TypeResolverImpl> {
+        match &mut self.context {
+            Some(x) => x,
+            None => panic!("stack underflow"),
+        }
     }
 }

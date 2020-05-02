@@ -1,6 +1,4 @@
-use super::{
-    HasQualifier, QualifiedName, ResolveInto, ResolveIntoRef, TypeQualifier, TypeResolver,
-};
+use super::{HasQualifier, NameTrait, QualifiedName, TypeQualifier};
 use crate::common::CaseInsensitiveString;
 use std::convert::TryFrom;
 use std::fmt::Display;
@@ -11,41 +9,39 @@ pub enum Name {
     Typed(QualifiedName),
 }
 
-impl AsRef<CaseInsensitiveString> for Name {
-    fn as_ref(&self) -> &CaseInsensitiveString {
+impl NameTrait for CaseInsensitiveString {
+    fn bare_name(&self) -> &CaseInsensitiveString {
+        self
+    }
+
+    fn is_qualified(&self) -> bool {
+        false
+    }
+
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
+        None
+    }
+}
+
+impl NameTrait for Name {
+    fn bare_name(&self) -> &CaseInsensitiveString {
         match self {
-            Self::Bare(s) => s,
+            Self::Bare(b) => b,
             Self::Typed(t) => t.bare_name(),
         }
     }
-}
 
-impl ResolveIntoRef<TypeQualifier> for Name {
-    fn resolve_into<T: TypeResolver>(&self, resolver: &T) -> TypeQualifier {
+    fn is_qualified(&self) -> bool {
         match self {
-            Name::Bare(b) => resolver.resolve(b),
-            Name::Typed(t) => t.qualifier(),
+            Self::Bare(_) => false,
+            Self::Typed(_) => true,
         }
     }
-}
 
-impl ResolveIntoRef<QualifiedName> for Name {
-    fn resolve_into<T: TypeResolver>(&self, resolver: &T) -> QualifiedName {
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
         match self {
-            Name::Bare(s) => QualifiedName::new(s.clone(), resolver.resolve(s)),
-            Name::Typed(t) => t.clone(),
-        }
-    }
-}
-
-impl ResolveInto<QualifiedName> for Name {
-    fn resolve_into<T: TypeResolver>(self, resolver: &T) -> QualifiedName {
-        match self {
-            Name::Bare(s) => {
-                let qualifier = resolver.resolve(&s);
-                QualifiedName::new(s, qualifier)
-            }
-            Name::Typed(t) => t,
+            Self::Bare(_) => None,
+            Self::Typed(t) => Some(t.qualifier()),
         }
     }
 }

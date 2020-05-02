@@ -51,6 +51,18 @@ impl<T: std::fmt::Debug + Sized> AsRef<T> for Locatable<T> {
     }
 }
 
+// AtLocation
+
+pub trait AtLocation<T: std::fmt::Debug + Sized> {
+    fn at(self, pos: Location) -> Locatable<T>;
+}
+
+impl<T: std::fmt::Debug + Sized> AtLocation<T> for T {
+    fn at(self, pos: Location) -> Locatable<T> {
+        Locatable::new(self, pos)
+    }
+}
+
 // HasLocation
 
 pub trait HasLocation {

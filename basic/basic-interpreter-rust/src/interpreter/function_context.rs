@@ -1,24 +1,14 @@
-use crate::interpreter::subprogram_context::{
-    CmpQualifier, QualifiedImplementationNode, SubprogramContext,
-};
-use crate::parser::{
-    HasQualifier, NameNode, QualifiedName, ResolveIntoRef, TypeQualifier, TypeResolver,
-};
+use crate::interpreter::subprogram_context::{QualifiedImplementationNode, SubprogramContext};
+use crate::parser::QualifiedName;
 
 //pub type QualifiedFunctionDeclarationNode = QualifiedDeclarationNode<QualifiedName>;
 pub type QualifiedFunctionImplementationNode = QualifiedImplementationNode<QualifiedName>;
 pub type FunctionContext = SubprogramContext<QualifiedName>;
 
-impl CmpQualifier<QualifiedName> for NameNode {
-    fn eq_qualifier<TR: TypeResolver>(left: &Self, right: &QualifiedName, resolver: &TR) -> bool {
-        let left_qualifier: TypeQualifier = left.resolve_into(resolver);
-        left_qualifier == right.qualifier()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
+    use crate::assert_pre_process_err;
     use crate::common::Location;
     use crate::interpreter::InterpreterError;
 
@@ -43,10 +33,7 @@ mod tests {
         DECLARE FUNCTION Add(A, B, C)
         PRINT Add(1, 2)
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Argument-count mismatch", Location::new(3, 9))
-        );
+        assert_pre_process_err!(program, "Argument-count mismatch", 3, 9);
     }
 
     #[test]
@@ -58,10 +45,7 @@ mod tests {
             Add = A + B +C
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Argument-count mismatch", Location::new(4, 9))
-        );
+        assert_pre_process_err!(program, "Argument-count mismatch", 4, 9);
     }
 
     #[test]
@@ -71,10 +55,7 @@ mod tests {
         DECLARE FUNCTION Add%(A, B)
         PRINT Add(1, 2)
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 9))
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 3, 9);
     }
 
     #[test]
@@ -89,10 +70,7 @@ mod tests {
         Add = A + B
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Duplicate definition", Location::new(7, 9))
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 7, 9);
     }
 
     #[test]
@@ -102,10 +80,7 @@ mod tests {
         DECLARE FUNCTION Add(A$, B)
         PRINT Add(1, 2)
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Parameter type mismatch", Location::new(3, 30))
-        );
+        assert_pre_process_err!(program, "Parameter type mismatch", 3, 30);
     }
 
     #[test]
@@ -117,10 +92,7 @@ mod tests {
         Add = A + B
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Parameter type mismatch", Location::new(4, 25))
-        );
+        assert_pre_process_err!(program, "Parameter type mismatch", 4, 25);
     }
 
     #[test]
@@ -132,10 +104,7 @@ mod tests {
             Add# = A + B
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 15))
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 3, 15);
     }
 
     #[test]
@@ -147,10 +116,7 @@ mod tests {
             Add = A + B
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new_with_pos("Duplicate definition", Location::new(4, 9))
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 4, 9);
     }
 
     #[test]
@@ -162,13 +128,7 @@ mod tests {
             Add! = A + B
         END FUNCTION
         ";
-        assert_eq!(
-            interpret_err(program),
-            InterpreterError::new(
-                "Duplicate definition",
-                vec![Location::new(5, 13), Location::new(3, 15)]
-            )
-        );
+        assert_pre_process_err!(program, "Duplicate definition", 5, 13);
     }
 
     #[test]
