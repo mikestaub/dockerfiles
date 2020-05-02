@@ -45,7 +45,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 // TODO: 1. instructionContext -> emitter
@@ -102,12 +102,13 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
         program: ProgramNode,
     ) -> Result<Vec<InstructionNode>> {
         let mut results = InstructionContext::new();
-        for x in program {
-            match x {
-                TopLevelTokenNode::Statement(s) => {
-                    self.generate_statement_instructions(&mut results, s)?;
+        for t in program {
+            let (top_level_token, pos) = t.consume();
+            match top_level_token {
+                TopLevelToken::Statement(s) => {
+                    self.generate_statement_node_instructions(&mut results, s.at(pos))?;
                 }
-                TopLevelTokenNode::DefType(d, pos) => {
+                TopLevelToken::DefType(d) => {
                     results.push(Instruction::DefType(d), pos);
                 }
                 _ => unimplemented!(),
@@ -120,10 +121,9 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
 
         // functions
         for x in self.function_context.implementations.clone().into_iter() {
-            let (k, v) = x;
+            let (_, v) = x;
             let pos = v.location();
             let name = v.name;
-            let params = v.parameters;
             let block = v.block;
             let label = CaseInsensitiveString::new(format!(":fun:{}", name.bare_name()));
             results.push(Instruction::Label(label), pos);
@@ -139,10 +139,9 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
 
         // subs
         for x in self.sub_context.implementations.clone().into_iter() {
-            let (k, v) = x;
+            let (_, v) = x;
             let pos = v.location();
             let name = v.name;
-            let params = v.parameters;
             let block = v.block;
             let label = CaseInsensitiveString::new(format!(":sub:{}", name.bare_name()));
             results.push(Instruction::Label(label), pos);
@@ -275,32 +274,32 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::Plus => {
                 let a = self.get_a();
                 let b = self.get_b();
-                self.set_a(
-                    a.plus(&b)
-                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
-                );
+                let c = a
+                    .plus(&b)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
             }
             Instruction::Minus => {
                 let a = self.get_a();
                 let b = self.get_b();
-                self.set_a(
-                    a.minus(&b)
-                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
-                );
+                let c = a
+                    .minus(&b)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
             }
             Instruction::NegateA => {
                 let a = self.get_a();
-                self.set_a(
-                    a.negate()
-                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
-                );
+                let c = a
+                    .negate()
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
             }
             Instruction::NotA => {
                 let a = self.get_a();
-                self.set_a(
-                    a.unary_not()
-                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
-                );
+                let c = a
+                    .unary_not()
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
             }
             Instruction::CopyVarToA(n) => {
                 let name_node: NameNode = n.clone().at(pos);
@@ -352,9 +351,8 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::JumpIfFalse(resolved_idx) => {
                 let a = self.get_a();
-                let is_true: bool = (&a)
-                    .try_into()
-                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                let is_true: bool =
+                    bool::try_from(a).map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 if !is_true {
                     *i = resolved_idx - 1; // the +1 will happen at the end of the loop
                 }

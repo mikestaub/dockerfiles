@@ -1,16 +1,9 @@
-use super::{
-    unexpected, DefType, LetterRange, Parser, ParserError, TopLevelTokenNode, TypeQualifier,
-};
-use crate::common::Location;
+use super::{unexpected, DefType, LetterRange, Parser, ParserError, TopLevelToken, TypeQualifier};
 use crate::lexer::{Keyword, LexemeNode};
 use std::io::BufRead;
 
 impl<T: BufRead> Parser<T> {
-    pub fn demand_def_type(
-        &mut self,
-        keyword: Keyword,
-        pos: Location,
-    ) -> Result<TopLevelTokenNode, ParserError> {
+    pub fn demand_def_type(&mut self, keyword: Keyword) -> Result<TopLevelToken, ParserError> {
         let qualifier = match keyword {
             Keyword::DefDbl => TypeQualifier::HashDouble,
             Keyword::DefInt => TypeQualifier::PercentInteger,
@@ -90,10 +83,7 @@ impl<T: BufRead> Parser<T> {
                 _ => return unexpected("Syntax error", next),
             }
         }
-        Ok(TopLevelTokenNode::DefType(
-            DefType::new(qualifier, ranges),
-            pos,
-        ))
+        Ok(TopLevelToken::DefType(DefType::new(qualifier, ranges)))
     }
 }
 
@@ -101,13 +91,14 @@ impl<T: BufRead> Parser<T> {
 mod tests {
     use super::super::test_utils::*;
     use super::*;
+    use crate::common::*;
     use crate::parser::HasQualifier;
 
     /// Asserts that the given input program contains a def type top level token.
     macro_rules! assert_def_type {
         ($input:expr, $expected_qualifier:expr, $expected_ranges:expr) => {
-            match parse($input).demand_single() {
-                TopLevelTokenNode::DefType(x, _) => {
+            match parse($input).demand_single().as_ref() {
+                TopLevelToken::DefType(x) => {
                     assert_eq!(x.qualifier(), $expected_qualifier);
                     assert_eq!(x.ranges(), &$expected_ranges);
                 }

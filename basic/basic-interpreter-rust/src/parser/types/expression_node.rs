@@ -16,6 +16,8 @@ pub enum UnaryOperand {
     Not,
 }
 
+pub type ArgumentNodes = Vec<ExpressionNode>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     SingleLiteral(f32),
@@ -25,7 +27,7 @@ pub enum Expression {
     #[allow(dead_code)]
     LongLiteral(i64),
     VariableName(Name),
-    FunctionCall(Name, Vec<ExpressionNode>),
+    FunctionCall(Name, ArgumentNodes),
     BinaryExpression(Operand, Box<ExpressionNode>, Box<ExpressionNode>),
     UnaryExpression(UnaryOperand, Box<ExpressionNode>),
 }
@@ -83,13 +85,3 @@ impl Expression {
         }
     }
 }
-
-// #[cfg(test)]
-// impl PartialEq<i32> for ExpressionNode {
-//     fn eq(&self, other: &i32) -> bool {
-//         match self {
-//             ExpressionNode::IntegerLiteral(i, _) => i == other,
-//             _ => false,
-//         }
-//     }
-// }

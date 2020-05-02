@@ -9,12 +9,6 @@ pub enum Name {
     Qualified(QualifiedName),
 }
 
-impl AsRef<Name> for Name {
-    fn as_ref(&self) -> &Name {
-        self
-    }
-}
-
 impl Name {
     pub fn new<S: AsRef<str>>(word: S, optional_type_qualifier: Option<TypeQualifier>) -> Self {
         match optional_type_qualifier {
@@ -68,8 +62,8 @@ impl<S: AsRef<str>> From<S> for Name {
 impl Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Name::Bare(s) => write!(f, "{}", s),
-            Name::Qualified(t) => write!(f, "{}", t),
+            Name::Bare(bare) => bare.fmt(f),
+            Name::Qualified(qualified) => qualified.fmt(f),
         }
     }
 }

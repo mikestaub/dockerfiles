@@ -1,5 +1,4 @@
 use super::*;
-use crate::common::{Locatable, Location};
 use crate::lexer::{Keyword, LexemeNode};
 use std::convert::TryFrom;
 use std::io::BufRead;
@@ -226,15 +225,15 @@ impl<T: BufRead> Parser<T> {
 mod tests {
     use super::super::test_utils::*;
     use crate::common::*;
-    use crate::parser::{Expression, ExpressionNode, Name, Operand, StatementNode, UnaryOperand};
+    use crate::parser::{Expression, Name, Operand, Statement, UnaryOperand};
 
     macro_rules! assert_expression {
         ($left:expr, $right:expr) => {
-            let mut program = parse(&format!("PRINT {}", $left)).demand_single_statement();
+            let program = parse(&format!("PRINT {}", $left)).demand_single_statement();
             match program {
-                StatementNode::SubCall(_, mut args) => {
+                Statement::SubCall(_, args) => {
                     assert_eq!(1, args.len());
-                    assert_eq!(args.pop().unwrap().strip_location(), $right);
+                    assert_eq!(args[0].clone().strip_location(), $right);
                 }
                 _ => panic!("Expected sub-call"),
             }

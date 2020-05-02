@@ -1,4 +1,5 @@
 use super::{InstructionContext, Interpreter, Result, Stdlib};
+use crate::common::*;
 use crate::parser::IfBlockNode;
 
 impl<S: Stdlib> Interpreter<S> {
@@ -6,13 +7,13 @@ impl<S: Stdlib> Interpreter<S> {
         &self,
         result: &mut InstructionContext,
         if_block_statement: IfBlockNode,
+        pos: Location,
     ) -> Result<()> {
         let IfBlockNode {
             if_block,
             else_if_blocks,
             else_block,
         } = if_block_statement;
-        let pos = if_block.pos;
 
         // evaluate condition into A
         self.generate_expression_instructions(result, if_block.condition)?;

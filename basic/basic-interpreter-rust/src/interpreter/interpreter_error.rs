@@ -29,6 +29,23 @@ impl InterpreterError {
         InterpreterError::new(self.message, new_vec)
     }
 
+    pub fn at_non_zero_location(self, pos: Location) -> Self {
+        if self.stacktrace.is_empty() {
+            InterpreterError::new_with_pos(self.message, pos)
+        } else {
+            if self.stacktrace[self.stacktrace.len() - 1] == Location::zero() {
+                let mut new_stacktrace = Stacktrace::new();
+                for i in 0..self.stacktrace.len() - 1 {
+                    new_stacktrace.push(self.stacktrace[i]);
+                }
+                new_stacktrace.push(pos);
+                Self::new(self.message, new_stacktrace)
+            } else {
+                self
+            }
+        }
+    }
+
     #[cfg(test)]
     pub fn message(&self) -> &String {
         &self.message

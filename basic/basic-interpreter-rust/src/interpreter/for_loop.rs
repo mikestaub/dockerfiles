@@ -1,12 +1,13 @@
 use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib, Variant};
 use crate::common::*;
-use crate::parser::{BlockNode, ForLoopNode, Name};
+use crate::parser::{ForLoopNode, Name, StatementNodes};
 
 impl<S: Stdlib> Interpreter<S> {
     pub fn generate_for_loop_instructions(
         &self,
         result: &mut InstructionContext,
         f: ForLoopNode,
+        pos: Location,
     ) -> Result<()> {
         let ForLoopNode {
             variable_name,
@@ -14,7 +15,6 @@ impl<S: Stdlib> Interpreter<S> {
             upper_bound,
             step,
             statements,
-            pos,
             next_counter: _,
         } = f;
         let counter_var_name: Name = variable_name.strip_location();
@@ -102,7 +102,7 @@ impl<S: Stdlib> Interpreter<S> {
         &self,
         result: &mut InstructionContext,
         counter_var_name: Name,
-        statements: BlockNode,
+        statements: StatementNodes,
         is_positive: bool,
         pos: Location,
     ) -> Result<()> {

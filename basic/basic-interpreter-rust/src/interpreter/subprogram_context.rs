@@ -70,7 +70,7 @@ impl<T: NameTrait> NameTrait for QualifiedDeclarationNode<T> {
 pub struct QualifiedImplementationNode<T: NameTrait> {
     pub name: T,
     pub parameters: Vec<QualifiedName>,
-    pub block: BlockNode,
+    pub block: StatementNodes,
     pos: Location,
 }
 
@@ -78,7 +78,7 @@ impl<T: Clone + NameTrait> QualifiedImplementationNode<T> {
     pub fn new<TR: TypeResolver, TName>(
         name: TName,
         parameters: Vec<NameNode>,
-        block: BlockNode,
+        block: StatementNodes,
         pos: Location,
         resolver: &TR,
     ) -> Self
@@ -186,7 +186,7 @@ impl<T: NameTrait> SubprogramContext<T> {
         &mut self,
         name_node: TName,
         parameters: Vec<NameNode>,
-        block: BlockNode,
+        block: StatementNodes,
         pos: Location,
         resolver: &TR,
     ) -> Result<()> {
@@ -196,7 +196,8 @@ impl<T: NameTrait> SubprogramContext<T> {
         } else {
             self.validate_against_existing_declaration(&name_node, &parameters, pos, resolver)?;
             let resolved_name: T = TName::resolve_into(&name_node, resolver);
-            let modified_block = BlockNode::assignment_to_set_return_value(block, &resolved_name)?;
+            let modified_block =
+                StatementNodes::assignment_to_set_return_value(block, &resolved_name)?;
             self.implementations.insert(
                 bare_name.clone(),
                 QualifiedImplementationNode::new(
@@ -301,24 +302,37 @@ where
 impl<T: NameTrait> AssignmentToSetReturnValue<T> for ConditionalBlockNode {
     fn assignment_to_set_return_value(node: Self, result_name: &T) -> Result<Self> {
         Ok(ConditionalBlockNode {
-            pos: node.pos,
             condition: node.condition,
-            statements: BlockNode::assignment_to_set_return_value(node.statements, result_name)?,
+            statements: StatementNodes::assignment_to_set_return_value(
+                node.statements,
+                result_name,
+            )?,
         })
     }
 }
 
 impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
     fn assignment_to_set_return_value(node: Self, result_name: &T) -> Result<Self> {
-        match node {
+        let (s, pos) = node.consume();
+        Statement::assignment_to_set_return_value(s, result_name)
+            .map(|x| x.at(pos))
+            .map_err(|e| e.at_non_zero_location(pos))
+    }
+}
+
+impl<T: NameTrait> AssignmentToSetReturnValue<T> for Statement {
+    fn assignment_to_set_return_value(statement: Self, result_name: &T) -> Result<Self> {
+        match statement {
             Self::ForLoop(f) => Ok(Self::ForLoop(ForLoopNode {
                 variable_name: f.variable_name,
                 lower_bound: f.lower_bound,
                 upper_bound: f.upper_bound,
                 step: f.step,
-                statements: BlockNode::assignment_to_set_return_value(f.statements, result_name)?,
+                statements: StatementNodes::assignment_to_set_return_value(
+                    f.statements,
+                    result_name,
+                )?,
                 next_counter: f.next_counter,
-                pos: f.pos,
             })),
             Self::IfBlock(i) => Ok(Self::IfBlock(IfBlockNode {
                 if_block: ConditionalBlockNode::assignment_to_set_return_value(
@@ -329,14 +343,13 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
                     i.else_if_blocks,
                     result_name,
                 )?,
-                else_block: Option::<BlockNode>::assignment_to_set_return_value(
+                else_block: Option::<StatementNodes>::assignment_to_set_return_value(
                     i.else_block,
                     result_name,
                 )?,
             })),
             Self::Assignment(left, right) => {
-                let n: &Name = left.as_ref();
-                match n {
+                match &left {
                     Name::Bare(b) => {
                         if b == result_name.bare_name() {
                             // assigning to function result name
@@ -354,11 +367,11 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
                                 if result_name.opt_qualifier().unwrap() == q.qualifier() {
                                     Ok(Self::InternalSetReturnValue(right))
                                 } else {
-                                    err_pre_process("Duplicate definition", left.location())
+                                    err_pre_process("Duplicate definition", Location::zero())
                                 }
                             } else {
                                 // sub
-                                err_pre_process("Duplicate definition", left.location())
+                                err_pre_process("Duplicate definition", Location::zero())
                             }
                         } else {
                             Ok(Self::Assignment(left, right))
@@ -369,7 +382,7 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
             Self::While(w) => Ok(Self::While(
                 ConditionalBlockNode::assignment_to_set_return_value(w, result_name)?,
             )),
-            Self::Const(left, right, pos) => {
+            Self::Const(left, right) => {
                 let n: &Name = left.as_ref();
                 match n {
                     Name::Bare(b) => {
@@ -377,19 +390,19 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
                             // CONST cannot match function result name
                             err_pre_process("Duplicate definition", left.location())
                         } else {
-                            Ok(Self::Const(left, right, pos))
+                            Ok(Self::Const(left, right))
                         }
                     }
                     Name::Qualified(q) => {
                         if q.bare_name() == result_name.bare_name() {
                             err_pre_process("Duplicate definition", left.location())
                         } else {
-                            Ok(Self::Const(left, right, pos))
+                            Ok(Self::Const(left, right))
                         }
                     }
                 }
             }
-            _ => Ok(node),
+            _ => Ok(statement),
         }
     }
 }

@@ -1,17 +1,21 @@
-use super::*;
+use crate::common::*;
 use crate::lexer::{Keyword, LexemeNode};
+use crate::parser::types::*;
+use crate::parser::{unexpected, Parser, ParserError};
 use std::convert::TryFrom;
 use std::io::BufRead;
 
 impl<T: BufRead> Parser<T> {
     pub fn demand_statement(&mut self, next: LexemeNode) -> Result<StatementNode, ParserError> {
         match next {
-            LexemeNode::Keyword(Keyword::For, _, pos) => self.demand_for_loop(pos),
-            LexemeNode::Keyword(Keyword::If, _, pos) => self.demand_if_block(pos),
-            LexemeNode::Keyword(Keyword::While, _, pos) => self.demand_while_block(pos),
-            LexemeNode::Keyword(Keyword::Const, _, pos) => self.demand_const(pos),
-            LexemeNode::Keyword(Keyword::On, _, pos) => self.demand_on(pos),
-            LexemeNode::Keyword(Keyword::GoTo, _, pos) => self.demand_go_to(pos),
+            LexemeNode::Keyword(Keyword::For, _, pos) => self.demand_for_loop().map(|x| x.at(pos)),
+            LexemeNode::Keyword(Keyword::If, _, pos) => self.demand_if_block().map(|x| x.at(pos)),
+            LexemeNode::Keyword(Keyword::While, _, pos) => {
+                self.demand_while_block().map(|x| x.at(pos))
+            }
+            LexemeNode::Keyword(Keyword::Const, _, pos) => self.demand_const().map(|x| x.at(pos)),
+            LexemeNode::Keyword(Keyword::On, _, pos) => self.demand_on().map(|x| x.at(pos)),
+            LexemeNode::Keyword(Keyword::GoTo, _, pos) => self.demand_go_to().map(|x| x.at(pos)),
             LexemeNode::Keyword(Keyword::Input, w, pos) => self.demand_input(w, pos),
             _ => self.demand_assignment_or_sub_call_or_label(next, true),
         }
@@ -28,7 +32,7 @@ impl<T: BufRead> Parser<T> {
                 p,
                 false,
             ),
-            LexemeNode::Keyword(Keyword::GoTo, _, pos) => self.demand_go_to(pos),
+            LexemeNode::Keyword(Keyword::GoTo, _, pos) => self.demand_go_to().map(|x| x.at(pos)),
             LexemeNode::Keyword(Keyword::Input, w, pos) => self.demand_input(w, pos),
             _ => unexpected("Expected assignment, sub-call or GOTO after THEN", next),
         }
@@ -79,7 +83,7 @@ impl<T: BufRead> Parser<T> {
                 // label
                 if labels_allowed {
                     self.read_demand_eol_or_eof_skipping_whitespace()?;
-                    Ok(StatementNode::Label(bare_name, bare_name_pos))
+                    Ok(Statement::Label(bare_name).at(bare_name_pos))
                 } else {
                     unexpected("Expected type qualifier", next)
                 }
@@ -127,11 +131,11 @@ impl<T: BufRead> Parser<T> {
         &mut self,
         exit_predicate: F,
         eof_msg: S,
-    ) -> Result<(BlockNode, LexemeNode), ParserError>
+    ) -> Result<(StatementNodes, LexemeNode), ParserError>
     where
         F: Fn(&LexemeNode) -> bool,
     {
-        let mut statements: BlockNode = vec![];
+        let mut statements: StatementNodes = vec![];
         loop {
             let next = self.read_skipping_whitespace_and_eol()?;
             if next.is_eof() {
@@ -146,7 +150,7 @@ impl<T: BufRead> Parser<T> {
         }
     }
 
-    fn demand_on(&mut self, pos: Location) -> Result<StatementNode, ParserError> {
+    fn demand_on(&mut self) -> Result<Statement, ParserError> {
         self.read_demand_whitespace("Expected space after ON")?;
         self.read_demand_keyword(Keyword::Error)?;
         self.read_demand_whitespace("Expected space after ERROR")?;
@@ -154,14 +158,14 @@ impl<T: BufRead> Parser<T> {
         self.read_demand_whitespace("Expected space after GOTO")?;
         let name_node = self.read_demand_bare_name_node("Expected label name")?;
         let (name, _) = name_node.consume();
-        Ok(StatementNode::ErrorHandler(name, pos))
+        Ok(Statement::ErrorHandler(name))
     }
 
-    fn demand_go_to(&mut self, pos: Location) -> Result<StatementNode, ParserError> {
+    fn demand_go_to(&mut self) -> Result<Statement, ParserError> {
         self.read_demand_whitespace("Expected space after GOTO")?;
         let name_node = self.read_demand_bare_name_node("Expected label name")?;
         let (name, _) = name_node.consume();
-        Ok(StatementNode::GoTo(name, pos))
+        Ok(Statement::GoTo(name))
     }
 
     fn demand_input(

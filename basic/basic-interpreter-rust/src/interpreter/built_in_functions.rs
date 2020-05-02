@@ -5,8 +5,8 @@ use crate::interpreter::{
 };
 use crate::parser::{ExpressionNode, Name, NameNode};
 
-pub fn is_built_in_function<S: AsRef<Name>>(function_name: S) -> bool {
-    function_name.as_ref() == &Name::from("ENVIRON$")
+pub fn is_built_in_function(function_name: &Name) -> bool {
+    function_name == &Name::from("ENVIRON$")
 }
 
 impl<S: Stdlib> Interpreter<S> {

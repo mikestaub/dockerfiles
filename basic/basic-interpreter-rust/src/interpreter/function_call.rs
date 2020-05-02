@@ -12,7 +12,7 @@ impl<S: Stdlib> Interpreter<S> {
     ) -> Result<()> {
         let pos = function_name.location();
 
-        if is_built_in_function(&function_name) {
+        if is_built_in_function(function_name.as_ref()) {
             self.generate_built_in_function_call_instructions(result, function_name, args)?;
         } else {
             let pos = function_name.location();

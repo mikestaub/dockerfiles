@@ -11,7 +11,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         let pos = name_node.location();
-        if is_built_in_sub(&name_node) {
+        if is_built_in_sub(name_node.as_ref()) {
             self.generate_built_in_sub_call_instructions(result, name_node, args)?;
         } else {
             let (name, pos) = name_node.consume();

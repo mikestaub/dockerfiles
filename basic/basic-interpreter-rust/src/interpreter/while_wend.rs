@@ -7,8 +7,8 @@ impl<S: Stdlib> Interpreter<S> {
         &self,
         result: &mut InstructionContext,
         w: ConditionalBlockNode,
+        pos: Location,
     ) -> Result<()> {
-        let pos = w.pos;
         let start_idx = result.instructions.len();
         // evaluate condition into register A
         self.generate_expression_instructions(result, w.condition)?;

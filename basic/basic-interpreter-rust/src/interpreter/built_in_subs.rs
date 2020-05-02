@@ -8,11 +8,8 @@ use crate::parser::{
     BareNameNode, Expression, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver,
 };
 
-pub fn is_built_in_sub(sub_name: &BareNameNode) -> bool {
-    sub_name.as_ref() == "ENVIRON"
-        || sub_name.as_ref() == "PRINT"
-        || sub_name.as_ref() == "INPUT"
-        || sub_name.as_ref() == "SYSTEM"
+pub fn is_built_in_sub(sub_name: &CaseInsensitiveString) -> bool {
+    sub_name == "ENVIRON" || sub_name == "PRINT" || sub_name == "INPUT" || sub_name == "SYSTEM"
 }
 
 impl<S: Stdlib> Interpreter<S> {

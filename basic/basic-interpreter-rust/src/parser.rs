@@ -57,14 +57,14 @@ impl<T: BufRead> Parser<T> {
     ) -> Result<TopLevelTokenNode, ParserError> {
         match next {
             LexemeNode::Keyword(k, _, pos) => match k {
-                Keyword::Declare => self.demand_declaration(pos),
+                Keyword::Declare => self.demand_declaration().map(|x| x.at(pos)),
                 Keyword::DefDbl
                 | Keyword::DefInt
                 | Keyword::DefLng
                 | Keyword::DefSng
-                | Keyword::DefStr => self.demand_def_type(k, pos),
-                Keyword::Function => self.demand_function_implementation(pos),
-                Keyword::Sub => self.demand_sub_implementation(pos),
+                | Keyword::DefStr => self.demand_def_type(k).map(|x| x.at(pos)),
+                Keyword::Function => self.demand_function_implementation().map(|x| x.at(pos)),
+                Keyword::Sub => self.demand_sub_implementation().map(|x| x.at(pos)),
                 Keyword::If
                 | Keyword::Input
                 | Keyword::For
@@ -73,12 +73,14 @@ impl<T: BufRead> Parser<T> {
                 | Keyword::On
                 | Keyword::GoTo => self
                     .demand_statement(next)
-                    .map(|s| TopLevelTokenNode::Statement(s)),
+                    .map(|s| s.consume())
+                    .map(|(s, p)| TopLevelToken::from(s).at(p)),
                 _ => unexpected("Unexpected top level token", next),
             },
             _ => self
                 .demand_statement(next)
-                .map(|s| TopLevelTokenNode::Statement(s)),
+                .map(|s| s.consume())
+                .map(|(s, p)| TopLevelToken::from(s).at(p)),
         }
     }
 
@@ -193,41 +195,40 @@ impl From<File> for Parser<BufReader<File>> {
 #[cfg(test)]
 mod tests {
     use super::test_utils::*;
-    use super::*;
     use crate::common::*;
+    use crate::parser::types::*;
 
     #[test]
     fn test_parse_fixture_fib() {
-        let program = parse_file("FIB.BAS");
+        let program = parse_file("FIB.BAS").strip_location();
         assert_eq!(
             program,
             vec![
                 // DECLARE FUNCTION Fib! (N!)
-                TopLevelTokenNode::FunctionDeclaration(
+                TopLevelToken::FunctionDeclaration(
                     "Fib!".as_name(1, 18),
                     vec!["N!".as_name(1, 24)],
-                    Location::new(1, 1)
                 ),
                 // PRINT "Enter the number of fibonacci to calculate"
-                TopLevelTokenNode::Statement(StatementNode::SubCall(
-                    "PRINT".as_bare_name(2, 1),
+                TopLevelToken::Statement(Statement::SubCall(
+                    BareName::from("PRINT"),
                     vec!["Enter the number of fibonacci to calculate".as_lit_expr(2, 7)],
                 )),
                 // INPUT N
-                TopLevelTokenNode::Statement(StatementNode::SubCall(
-                    "INPUT".as_bare_name(3, 1),
+                TopLevelToken::Statement(Statement::SubCall(
+                    BareName::from("INPUT"),
                     vec!["N".as_var_expr(3, 7)]
                 )),
                 // FOR I = 0 TO N
-                TopLevelTokenNode::Statement(StatementNode::ForLoop(ForLoopNode {
+                TopLevelToken::Statement(Statement::ForLoop(ForLoopNode {
                     variable_name: "I".as_name(4, 5),
                     lower_bound: 0.as_lit_expr(4, 9),
                     upper_bound: "N".as_var_expr(4, 14),
                     step: None,
                     statements: vec![
                         // PRINT "Fibonacci of ", I, " is ", Fib(I)
-                        StatementNode::SubCall(
-                            "PRINT".as_bare_name(5, 5),
+                        Statement::SubCall(
+                            BareName::from("PRINT"),
                             vec![
                                 "Fibonacci of".as_lit_expr(5, 11),
                                 "I".as_var_expr(5, 27),
@@ -238,20 +239,19 @@ mod tests {
                                 )
                                 .at_rc(5, 36),
                             ],
-                        ),
+                        )
+                        .at_rc(5, 5),
                     ],
                     next_counter: None,
-                    pos: Location::new(4, 1)
                 })),
                 // FUNCTION Fib (N)
-                TopLevelTokenNode::FunctionImplementation(
-                    "Fib".as_name(8, 10),
+                TopLevelToken::FunctionImplementation(
+                    Name::from("Fib").at_rc(8, 10),
                     vec!["N".as_name(8, 15)],
                     vec![
                         // IF N <= 1 THEN
-                        StatementNode::IfBlock(IfBlockNode {
+                        Statement::IfBlock(IfBlockNode {
                             if_block: ConditionalBlockNode {
-                                pos: Location::new(9, 5),
                                 // N <= 1
                                 condition: Expression::BinaryExpression(
                                     Operand::LessOrEqualThan,
@@ -261,17 +261,18 @@ mod tests {
                                 .at_rc(9, 10),
                                 statements: vec![
                                     // Fib = N
-                                    StatementNode::Assignment(
-                                        "Fib".as_name(10, 9),
+                                    Statement::Assignment(
+                                        Name::from("Fib"),
                                         "N".as_var_expr(10, 15)
                                     )
+                                    .at_rc(10, 9)
                                 ],
                             },
                             else_if_blocks: vec![],
                             else_block: Some(vec![
                                 // ELSE Fib = Fib(N - 1) + Fib(N - 2)
-                                StatementNode::Assignment(
-                                    "Fib".as_name(12, 9),
+                                Statement::Assignment(
+                                    Name::from("Fib"),
                                     Expression::BinaryExpression(
                                         Operand::Plus,
                                         Box::new(
@@ -301,10 +302,11 @@ mod tests {
                                     )
                                     .at_rc(12, 26)
                                 )
+                                .at_rc(12, 9)
                             ])
                         })
+                        .at_rc(9, 5)
                     ],
-                    Location::new(8, 1)
                 ),
             ],
         );

@@ -157,16 +157,15 @@ impl FunctionContext {
 
 impl Visitor<TopLevelTokenNode> for FunctionContext {
     fn visit(&mut self, a: &TopLevelTokenNode) -> Result<()> {
-        match a {
-            TopLevelTokenNode::DefType(d, _) => {
+        let pos = a.location();
+        match a.as_ref() {
+            TopLevelToken::DefType(d) => {
                 self.resolver.set(d);
                 Ok(())
             }
-            TopLevelTokenNode::FunctionDeclaration(n, params, pos) => {
-                self.add_declaration(n, params, *pos)
-            }
-            TopLevelTokenNode::FunctionImplementation(n, params, _, pos) => {
-                self.add_implementation(n, params, *pos)
+            TopLevelToken::FunctionDeclaration(n, params) => self.add_declaration(n, params, pos),
+            TopLevelToken::FunctionImplementation(n, params, _) => {
+                self.add_implementation(n, params, pos)
             }
             _ => Ok(()),
         }
@@ -278,16 +277,17 @@ impl SubContext {
 
 impl Visitor<TopLevelTokenNode> for SubContext {
     fn visit(&mut self, a: &TopLevelTokenNode) -> Result<()> {
-        match a {
-            TopLevelTokenNode::DefType(d, _) => {
+        let pos = a.location();
+        match a.as_ref() {
+            TopLevelToken::DefType(d) => {
                 self.resolver.set(d);
                 Ok(())
             }
-            TopLevelTokenNode::SubDeclaration(n, params, pos) => {
-                self.add_declaration(n.as_ref(), params, *pos)
+            TopLevelToken::SubDeclaration(n, params) => {
+                self.add_declaration(n.as_ref(), params, pos)
             }
-            TopLevelTokenNode::SubImplementation(n, params, _, pos) => {
-                self.add_implementation(n.as_ref(), params, *pos)
+            TopLevelToken::SubImplementation(n, params, _) => {
+                self.add_implementation(n.as_ref(), params, pos)
             }
             _ => Ok(()),
         }
@@ -374,7 +374,9 @@ where
 {
     fn convert(&mut self, a: Locatable<A>) -> Result<Locatable<B>> {
         let (element, pos) = a.consume();
-        self.convert(element).map(|x| x.at(pos))
+        self.convert(element)
+            .map(|x| x.at(pos))
+            .map_err(|e| e.at_non_zero_location(pos))
     }
 }
 
@@ -553,42 +555,41 @@ pub struct QForLoopNode {
     pub lower_bound: QExpressionNode,
     pub upper_bound: QExpressionNode,
     pub step: Option<QExpressionNode>,
-    pub statements: QBlockNode,
+    pub statements: QStatementNodes,
     pub next_counter: Option<QNameNode>,
-    pub pos: Location,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct QConditionalBlockNode {
-    pub pos: Location,
     pub condition: QExpressionNode,
-    pub statements: QBlockNode,
+    pub statements: QStatementNodes,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct QIfBlockNode {
     pub if_block: QConditionalBlockNode,
     pub else_if_blocks: Vec<QConditionalBlockNode>,
-    pub else_block: Option<QBlockNode>,
+    pub else_block: Option<QStatementNodes>,
 }
 
 pub type QNameNode = Locatable<QualifiedName>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QStatementNode {
-    SubCall(BareNameNode, Vec<QExpressionNode>),
+pub enum QStatement {
+    SubCall(BareName, Vec<QExpressionNode>),
     ForLoop(QForLoopNode),
     IfBlock(QIfBlockNode),
-    Assignment(QNameNode, QExpressionNode),
+    Assignment(QualifiedName, QExpressionNode),
     While(QConditionalBlockNode),
-    Const(QNameNode, QExpressionNode, Location),
-    ErrorHandler(CaseInsensitiveString, Location),
-    Label(CaseInsensitiveString, Location),
-    GoTo(CaseInsensitiveString, Location),
+    Const(QNameNode, QExpressionNode),
+    ErrorHandler(CaseInsensitiveString),
+    Label(CaseInsensitiveString),
+    GoTo(CaseInsensitiveString),
     SetReturnValue(QExpressionNode),
 }
 
-pub type QBlockNode = Vec<QStatementNode>;
+pub type QStatementNode = Locatable<QStatement>;
+pub type QStatementNodes = Vec<QStatementNode>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum QExpression {
@@ -608,17 +609,18 @@ pub enum QExpression {
 pub type QExpressionNode = Locatable<QExpression>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QTopLevelTokenNode {
+pub enum QTopLevelToken {
     /// A function implementation
-    FunctionImplementation(QNameNode, Vec<QNameNode>, QBlockNode, Location),
+    FunctionImplementation(QNameNode, Vec<QNameNode>, QStatementNodes),
 
     /// A simple or compound statement
-    Statement(QStatementNode),
+    Statement(QStatement),
 
     /// A sub implementation
-    SubImplementation(BareNameNode, Vec<QNameNode>, QBlockNode, Location),
+    SubImplementation(BareNameNode, Vec<QNameNode>, QStatementNodes),
 }
 
+pub type QTopLevelTokenNode = Locatable<QTopLevelToken>;
 pub type QProgramNode = Vec<QTopLevelTokenNode>;
 
 impl Converter<ProgramNode, QProgramNode> for Linter {
@@ -627,12 +629,16 @@ impl Converter<ProgramNode, QProgramNode> for Linter {
         self.functions = f;
         self.subs = s;
 
-        // will contain None where DefInt and declarations used to be
-        let b: Vec<Option<QTopLevelTokenNode>> = self.convert(a)?;
         let mut result: Vec<QTopLevelTokenNode> = vec![];
-        for opt in b {
+        for top_level_token_node in a.into_iter() {
+            // will contain None where DefInt and declarations used to be
+            let (top_level_token, pos) = top_level_token_node.consume();
+            let opt: Option<QTopLevelToken> = self.convert(top_level_token)?;
             match opt {
-                Some(t) => result.push(t),
+                Some(t) => {
+                    let r: QTopLevelTokenNode = t.at(pos);
+                    result.push(r);
+                }
                 _ => (),
             }
         }
@@ -653,56 +659,50 @@ impl Converter<Name, QualifiedName> for Linter {
 }
 
 // Option because we filter out DefType
-impl Converter<TopLevelTokenNode, Option<QTopLevelTokenNode>> for Linter {
-    fn convert(&mut self, a: TopLevelTokenNode) -> Result<Option<QTopLevelTokenNode>> {
+impl Converter<TopLevelToken, Option<QTopLevelToken>> for Linter {
+    fn convert(&mut self, a: TopLevelToken) -> Result<Option<QTopLevelToken>> {
         match a {
-            TopLevelTokenNode::DefType(d, _) => {
+            TopLevelToken::DefType(d) => {
                 self.resolver.set(&d);
                 Ok(None)
             }
-            TopLevelTokenNode::FunctionDeclaration(_, _, _)
-            | TopLevelTokenNode::SubDeclaration(_, _, _) => Ok(None),
-            TopLevelTokenNode::FunctionImplementation(n, params, block, pos) => {
+            TopLevelToken::FunctionDeclaration(_, _) | TopLevelToken::SubDeclaration(_, _) => {
+                Ok(None)
+            }
+            TopLevelToken::FunctionImplementation(n, params, block) => {
                 let mapped_name = self.convert(n)?;
                 let mapped_params = self.convert(params)?;
                 // register variables
                 self.push_function_context(mapped_name.bare_name());
-                let mapped = QTopLevelTokenNode::FunctionImplementation(
+                let mapped = QTopLevelToken::FunctionImplementation(
                     mapped_name,
                     mapped_params,
                     self.convert(block)?,
-                    pos,
                 );
                 self.pop_context();
                 Ok(Some(mapped))
             }
-            TopLevelTokenNode::SubImplementation(n, params, block, pos) => {
+            TopLevelToken::SubImplementation(n, params, block) => {
                 let mapped_params = self.convert(params)?;
                 self.push_sub_context(n.bare_name());
                 // register variables
-                let mapped = QTopLevelTokenNode::SubImplementation(
-                    n,
-                    mapped_params,
-                    self.convert(block)?,
-                    pos,
-                );
+                let mapped =
+                    QTopLevelToken::SubImplementation(n, mapped_params, self.convert(block)?);
                 self.pop_context();
                 Ok(Some(mapped))
             }
-            TopLevelTokenNode::Statement(s) => {
-                Ok(Some(QTopLevelTokenNode::Statement(self.convert(s)?)))
-            }
+            TopLevelToken::Statement(s) => Ok(Some(QTopLevelToken::Statement(self.convert(s)?))),
         }
     }
 }
 
-impl Converter<StatementNode, QStatementNode> for Linter {
-    fn convert(&mut self, a: StatementNode) -> Result<QStatementNode> {
+impl Converter<Statement, QStatement> for Linter {
+    fn convert(&mut self, a: Statement) -> Result<QStatement> {
         match a {
-            StatementNode::SubCall(n, args) => Ok(QStatementNode::SubCall(n, self.convert(args)?)),
-            StatementNode::ForLoop(f) => Ok(QStatementNode::ForLoop(self.convert(f)?)),
-            StatementNode::IfBlock(i) => Ok(QStatementNode::IfBlock(self.convert(i)?)),
-            StatementNode::Assignment(n, e) => {
+            Statement::SubCall(n, args) => Ok(QStatement::SubCall(n, self.convert(args)?)),
+            Statement::ForLoop(f) => Ok(QStatement::ForLoop(self.convert(f)?)),
+            Statement::IfBlock(i) => Ok(QStatement::IfBlock(self.convert(i)?)),
+            Statement::Assignment(n, e) => {
                 if self
                     .context
                     .function_name
@@ -714,9 +714,9 @@ impl Converter<StatementNode, QStatementNode> for Linter {
                     let function_type: TypeQualifier = self.functions.get(n.bare_name()).unwrap().0;
                     if n.bare_or_eq(function_type) {
                         // TODO check if casting is possible
-                        Ok(QStatementNode::SetReturnValue(self.convert(e)?))
+                        Ok(QStatement::SetReturnValue(self.convert(e)?))
                     } else {
-                        err("Duplicate definition", n.location())
+                        err("Duplicate definition", Location::zero())
                     }
                 } else if self
                     .context
@@ -726,30 +726,23 @@ impl Converter<StatementNode, QStatementNode> for Linter {
                     .unwrap_or_default()
                 {
                     // trying to assign to the sub name should always be an error hopefully
-                    err("Cannot assign to sub", n.location())
+                    err("Cannot assign to sub", Location::zero())
                 } else {
                     // TODO: it is possible to overwrite a const inside a function/sub
                     // register variable
-                    Ok(QStatementNode::Assignment(
-                        self.convert(n)?,
-                        self.convert(e)?,
-                    ))
+                    Ok(QStatement::Assignment(self.convert(n)?, self.convert(e)?))
                 }
             }
-            StatementNode::While(c) => Ok(QStatementNode::While(self.convert(c)?)),
-            StatementNode::Const(n, e, pos) => {
+            Statement::While(c) => Ok(QStatement::While(self.convert(c)?)),
+            Statement::Const(n, e) => {
                 // bare name resolves from right side, not resolver
                 // register constant
-                Ok(QStatementNode::Const(
-                    self.convert(n)?,
-                    self.convert(e)?,
-                    pos,
-                ))
+                Ok(QStatement::Const(self.convert(n)?, self.convert(e)?))
             }
-            StatementNode::ErrorHandler(l, pos) => Ok(QStatementNode::ErrorHandler(l, pos)),
-            StatementNode::Label(l, pos) => Ok(QStatementNode::Label(l, pos)),
-            StatementNode::GoTo(l, pos) => Ok(QStatementNode::GoTo(l, pos)),
-            StatementNode::InternalSetReturnValue(_) => unimplemented!(),
+            Statement::ErrorHandler(l) => Ok(QStatement::ErrorHandler(l)),
+            Statement::Label(l) => Ok(QStatement::Label(l)),
+            Statement::GoTo(l) => Ok(QStatement::GoTo(l)),
+            Statement::InternalSetReturnValue(_) => unimplemented!(),
         }
     }
 }
@@ -800,7 +793,6 @@ impl Converter<ForLoopNode, QForLoopNode> for Linter {
             step: self.convert(a.step)?,
             statements: self.convert(a.statements)?,
             next_counter: self.convert(a.next_counter)?,
-            pos: a.pos,
         })
     }
 }
@@ -808,7 +800,6 @@ impl Converter<ForLoopNode, QForLoopNode> for Linter {
 impl Converter<ConditionalBlockNode, QConditionalBlockNode> for Linter {
     fn convert(&mut self, a: ConditionalBlockNode) -> Result<QConditionalBlockNode> {
         Ok(QConditionalBlockNode {
-            pos: a.pos,
             condition: self.convert(a.condition)?,
             statements: self.convert(a.statements)?,
         })

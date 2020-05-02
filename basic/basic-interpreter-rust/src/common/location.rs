@@ -23,6 +23,10 @@ impl Location {
     pub fn start() -> Location {
         Location::new(1, 1)
     }
+
+    pub fn zero() -> Location {
+        Location::new(0, 0)
+    }
 }
 
 // Locatable
@@ -40,6 +44,14 @@ impl<T: std::fmt::Debug + Sized> Locatable<T> {
 
     pub fn consume(self) -> (T, Location) {
         (self.element, self.location)
+    }
+
+    pub fn at_non_zero_location(self, pos: Location) -> Self {
+        if self.location == Location::zero() {
+            Self::new(self.element, pos)
+        } else {
+            self
+        }
     }
 }
 
@@ -112,5 +124,11 @@ impl<T: std::fmt::Debug + Sized> StripLocationRef<T> for Locatable<T> {
 impl<T: std::fmt::Debug + Sized> StripLocationVal<T> for Locatable<T> {
     fn strip_location(self) -> T {
         self.element
+    }
+}
+
+impl<T: std::fmt::Debug + Sized> StripLocationVal<Vec<T>> for Vec<Locatable<T>> {
+    fn strip_location(self) -> Vec<T> {
+        self.into_iter().map(|x| x.strip_location()).collect()
     }
 }

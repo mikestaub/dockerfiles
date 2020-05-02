@@ -140,8 +140,8 @@ impl InstructionContext {
 // }
 
 // // function implementation
-// impl Visitor<(&QNameNode, &Vec<QNameNode>, &QBlockNode, &Location)> for Emitter {
-//     fn visit(&mut self, f: &(&QNameNode, &Vec<QNameNode>, &QBlockNode, &Location)) -> Result<()> {
+// impl Visitor<(&QNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)> for Emitter {
+//     fn visit(&mut self, f: &(&QNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)) -> Result<()> {
 //         let (name, params, block, pos) = *f;
 //         let label = CaseInsensitiveString::new(format!(":fun:{}", name.bare_name()));
 //         self.push(Instruction::Label(label), *pos);
@@ -158,8 +158,8 @@ impl InstructionContext {
 // }
 
 // // sub implementation
-// impl Visitor<(&BareNameNode, &Vec<QNameNode>, &QBlockNode, &Location)> for Emitter {
-//     fn visit(&mut self, f: &(&BareNameNode, &Vec<QNameNode>, &QBlockNode, &Location)) -> Result<()> {
+// impl Visitor<(&BareNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)> for Emitter {
+//     fn visit(&mut self, f: &(&BareNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)) -> Result<()> {
 //         let (name, params, block, pos) = *f;
 //         let label = CaseInsensitiveString::new(format!(":sub:{}", name.bare_name()));
 //         self.push(Instruction::Label(label), *pos);
