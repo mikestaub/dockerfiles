@@ -1,6 +1,6 @@
 use super::{Interpreter, Stdlib};
 use crate::interpreter::context::Context;
-use crate::interpreter::type_resolver_impl::TypeResolverImpl;
+use crate::parser::type_resolver_impl::TypeResolverImpl;
 
 /// Represents the owner of a variable context.
 pub trait ContextOwner {

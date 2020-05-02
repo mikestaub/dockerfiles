@@ -8,6 +8,7 @@ mod reader;
 use std::env;
 use std::fs::File;
 
+use interpreter::instruction_generator;
 use interpreter::{DefaultStdlib, Interpreter};
 use parser::Parser;
 
@@ -22,9 +23,12 @@ fn main() {
     match parser.parse() {
         Ok(program) => {
             let mut interpreter = Interpreter::new(DefaultStdlib {});
-            match interpreter.interpret(program) {
-                Ok(_) => (),
-                Err(e) => eprintln!("Runtime error. {:?}", e),
+            match instruction_generator::generate_instructions(program) {
+                Ok(instructions) => match interpreter.interpret(instructions) {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("Runtime error. {:?}", e),
+                },
+                Err(e) => eprintln!("Could not generate instructions {:?}", e),
             }
         }
         Err(e) => eprintln!("Could not parse program. {:?}", e),

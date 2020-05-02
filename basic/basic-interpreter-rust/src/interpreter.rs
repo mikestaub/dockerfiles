@@ -5,7 +5,6 @@ mod casting;
 mod constant;
 mod context;
 mod context_owner;
-mod emitter;
 mod expression;
 mod for_loop;
 mod function_call;
@@ -13,6 +12,7 @@ mod function_context;
 mod go_to;
 mod if_block;
 mod instruction;
+pub mod instruction_generator;
 mod interpreter_error;
 mod statement;
 mod stdlib;
@@ -26,8 +26,8 @@ mod while_wend;
 #[cfg(test)]
 mod test_utils;
 
-pub use self::emitter::*;
 pub use self::instruction::*;
+pub use self::instruction_generator::*;
 pub use self::interpreter_error::*;
 pub use self::stdlib::*;
 pub use self::variant::*;
@@ -36,14 +36,11 @@ use crate::common::*;
 use crate::interpreter::casting::cast;
 use crate::interpreter::context::Context;
 use crate::interpreter::context_owner::ContextOwner;
-use crate::interpreter::function_context::{FunctionContext, QualifiedFunctionImplementationNode};
-use crate::interpreter::sub_context::{QualifiedSubImplementationNode, SubContext};
 use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::*;
+use crate::parser::{DefType, Name, NameNode, NameTrait, TypeQualifier, TypeResolver};
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -70,8 +67,6 @@ pub type RegisterStack = VecDeque<Registers>;
 pub struct Interpreter<S: Stdlib> {
     stdlib: S,
     context: Option<Context<TypeResolverImpl>>,
-    function_context: FunctionContext,
-    sub_context: SubContext,
     type_resolver: Rc<RefCell<TypeResolverImpl>>,
     register_stack: RegisterStack,
     return_stack: Vec<usize>,
@@ -85,8 +80,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
         let mut result = Interpreter {
             stdlib,
             context: Some(Context::new(Rc::clone(&tr))),
-            function_context: FunctionContext::new(),
-            sub_context: SubContext::new(),
             type_resolver: tr,
             return_stack: vec![],
             register_stack: VecDeque::new(),
@@ -95,123 +88,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             .register_stack
             .push_back(Registers(Variant::VInteger(0), Variant::VInteger(0)));
         result
-    }
-
-    fn generate_instructions_unresolved(
-        &mut self,
-        program: ProgramNode,
-    ) -> Result<Vec<InstructionNode>> {
-        let mut results = InstructionContext::new();
-        for t in program {
-            let (top_level_token, pos) = t.consume();
-            match top_level_token {
-                TopLevelToken::Statement(s) => {
-                    self.generate_statement_node_instructions(&mut results, s.at(pos))?;
-                }
-                TopLevelToken::DefType(d) => {
-                    results.push(Instruction::DefType(d), pos);
-                }
-                _ => unimplemented!(),
-            }
-        }
-
-        // add HALT instruction at end of program to separate from the functions and subs
-        // TODO: nice to have: use location of last statement
-        results.push(Instruction::Halt, Location::start());
-
-        // functions
-        for x in self.function_context.implementations.clone().into_iter() {
-            let (_, v) = x;
-            let pos = v.location();
-            let name = v.name;
-            let block = v.block;
-            let label = CaseInsensitiveString::new(format!(":fun:{}", name.bare_name()));
-            results.push(Instruction::Label(label), pos);
-            // set default value
-            results.push(
-                Instruction::Load(Variant::default_variant(name.qualifier())),
-                pos,
-            );
-            results.push(Instruction::StoreAToResult, pos);
-            self.generate_block_instructions(&mut results, block)?;
-            results.push(Instruction::PopRet, pos);
-        }
-
-        // subs
-        for x in self.sub_context.implementations.clone().into_iter() {
-            let (_, v) = x;
-            let pos = v.location();
-            let name = v.name;
-            let block = v.block;
-            let label = CaseInsensitiveString::new(format!(":sub:{}", name.bare_name()));
-            results.push(Instruction::Label(label), pos);
-            self.generate_block_instructions(&mut results, block)?;
-            results.push(Instruction::PopRet, pos);
-        }
-
-        Ok(results.instructions)
-    }
-
-    pub fn generate_instructions(&mut self, program: ProgramNode) -> Result<Vec<InstructionNode>> {
-        let mut instruction_nodes = self.generate_instructions_unresolved(program)?;
-        let labels = Self::collect_labels(&instruction_nodes);
-        // resolve jumps
-        for instruction_node in instruction_nodes.iter_mut() {
-            let instruction: &Instruction = instruction_node.as_ref();
-            let pos: Location = instruction_node.location();
-            if let Instruction::UnresolvedJump(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::Jump(*idx).at(pos);
-                    }
-                    None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
-                    }
-                }
-            } else if let Instruction::UnresolvedJumpIfFalse(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::JumpIfFalse(*idx).at(pos);
-                    }
-                    None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
-                    }
-                }
-            } else if let Instruction::SetUnresolvedErrorHandler(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::SetErrorHandler(*idx).at(pos);
-                    }
-                    None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
-                    }
-                }
-            }
-        }
-        Ok(instruction_nodes)
-    }
-
-    fn collect_labels(
-        instructions: &Vec<InstructionNode>,
-    ) -> HashMap<CaseInsensitiveString, usize> {
-        let mut result: HashMap<CaseInsensitiveString, usize> = HashMap::new();
-        for j in 0..instructions.len() {
-            if let Instruction::Label(y) = instructions[j].as_ref() {
-                result.insert(y.clone(), j);
-            }
-        }
-        result
-    }
-
-    fn sanitize(&mut self, original_program: ProgramNode) -> Result<ProgramNode> {
-        subprogram_resolver::NoFunctionInConst::no_function_in_const(&original_program)?;
-        subprogram_resolver::for_next_counter_match(&original_program)?;
-        let (program, f_c, s_c) = subprogram_resolver::resolve(original_program)?;
-        subprogram_resolver::AllSubsKnown::all_subs_known(&program, &s_c)?;
-        subprogram_resolver::AllFunctionsKnown::all_functions_known(&program, &f_c)?;
-        self.function_context = f_c;
-        self.sub_context = s_c;
-        Ok(program)
     }
 
     fn get_a(&self) -> Variant {
@@ -432,10 +308,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
         Ok(())
     }
 
-    pub fn interpret(&mut self, original_program: ProgramNode) -> Result<()> {
-        let program = self.sanitize(original_program)?;
-
-        let instructions = self.generate_instructions(program)?;
+    pub fn interpret(&mut self, instructions: Vec<InstructionNode>) -> Result<()> {
         let mut i: usize = 0;
         let mut error_handler: Option<usize> = None;
         let mut exit: bool = false;
@@ -465,47 +338,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
 
     fn handle_def_type(&mut self, x: &DefType) {
         self.type_resolver.borrow_mut().set(x);
-    }
-}
-
-pub trait LookupFunctionImplementation {
-    fn has_function(&self, function_name: &NameNode) -> bool;
-
-    fn lookup_function_implementation(
-        &self,
-        function_name: &NameNode,
-    ) -> Option<QualifiedFunctionImplementationNode>;
-}
-
-impl<S: Stdlib> LookupFunctionImplementation for Interpreter<S> {
-    fn has_function(&self, function_name: &NameNode) -> bool {
-        self.function_context
-            .has_implementation(function_name.bare_name())
-    }
-
-    fn lookup_function_implementation(
-        &self,
-        function_name: &NameNode,
-    ) -> Option<QualifiedFunctionImplementationNode> {
-        self.function_context.get_implementation(function_name)
-    }
-}
-
-pub trait LookupSubImplementation {
-    fn has_sub(&self, sub_name: &BareNameNode) -> bool;
-
-    fn get_sub(&self, sub_name: &BareNameNode) -> QualifiedSubImplementationNode;
-}
-
-impl<S: Stdlib> LookupSubImplementation for Interpreter<S> {
-    fn has_sub(&self, sub_name: &BareNameNode) -> bool {
-        self.sub_context.has_implementation(sub_name.as_ref())
-    }
-
-    fn get_sub(&self, sub_name: &BareNameNode) -> QualifiedSubImplementationNode {
-        self.sub_context
-            .get_implementation(sub_name.as_ref())
-            .unwrap()
     }
 }
 

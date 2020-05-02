@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::interpreter::context_owner::ContextOwner;
+use crate::interpreter::instruction_generator;
 use crate::interpreter::variant::Variant;
 use crate::interpreter::{Instruction, Interpreter, InterpreterError, Result, Stdlib};
 use crate::parser::{Name, NameNode, Parser};
@@ -12,9 +13,7 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
-    let mut interpreter = Interpreter::new(MockStdlib::new());
-    interpreter
-        .generate_instructions(program)
+    instruction_generator::generate_instructions(program)
         .unwrap()
         .into_iter()
         .map(|x| x.consume().0)
@@ -27,8 +26,12 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
+    let instructions = instruction_generator::generate_instructions(program).unwrap();
     let mut interpreter = Interpreter::new(MockStdlib::new());
-    interpreter.interpret(program).map(|_| interpreter).unwrap()
+    interpreter
+        .interpret(instructions)
+        .map(|_| interpreter)
+        .unwrap()
 }
 
 pub fn interpret_with_stdlib<T, TStdlib>(input: T, stdlib: TStdlib) -> Interpreter<TStdlib>
@@ -38,8 +41,21 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
+    let instructions = instruction_generator::generate_instructions(program).unwrap();
     let mut interpreter = Interpreter::new(stdlib);
-    interpreter.interpret(program).map(|_| interpreter).unwrap()
+    interpreter
+        .interpret(instructions)
+        .map(|_| interpreter)
+        .unwrap()
+}
+
+pub fn instruction_generator_err<T>(input: T) -> InterpreterError
+where
+    T: AsRef<[u8]>,
+{
+    let mut parser = Parser::from(input);
+    let program = parser.parse().unwrap();
+    instruction_generator::generate_instructions(program).unwrap_err()
 }
 
 pub fn interpret_err<T>(input: T) -> InterpreterError
@@ -48,8 +64,9 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
+    let instructions = instruction_generator::generate_instructions(program).unwrap();
     let mut interpreter = Interpreter::new(MockStdlib::new());
-    interpreter.interpret(program).unwrap_err()
+    interpreter.interpret(instructions).unwrap_err()
 }
 
 pub fn interpret_file<S, TStdlib>(filename: S, stdlib: TStdlib) -> Result<Interpreter<TStdlib>>
@@ -60,8 +77,9 @@ where
     let file_path = format!("fixtures/{}", filename.as_ref());
     let mut parser = Parser::from(File::open(file_path).expect("Could not read bas file"));
     let program = parser.parse().unwrap();
+    let instructions = instruction_generator::generate_instructions(program).unwrap();
     let mut interpreter = Interpreter::new(stdlib);
-    interpreter.interpret(program).map(|_| interpreter)
+    interpreter.interpret(instructions).map(|_| interpreter)
 }
 
 #[derive(Debug)]
@@ -227,7 +245,7 @@ macro_rules! assert_err {
 macro_rules! assert_pre_process_err {
     ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
         assert_eq!(
-            interpret_err($program),
+            instruction_generator_err($program),
             InterpreterError::new_with_pos(
                 format!("[P] {}", $expected_msg),
                 Location::new($expected_row, $expected_col)

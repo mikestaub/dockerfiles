@@ -2,7 +2,7 @@ use crate::common::*;
 use crate::interpreter::context::Argument;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{
-    Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
+    Instruction, InstructionGenerator, Interpreter, InterpreterError, Result, Stdlib, Variant,
 };
 use crate::parser::{
     BareNameNode, Expression, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver,
@@ -12,27 +12,26 @@ pub fn is_built_in_sub(sub_name: &CaseInsensitiveString) -> bool {
     sub_name == "ENVIRON" || sub_name == "PRINT" || sub_name == "INPUT" || sub_name == "SYSTEM"
 }
 
-impl<S: Stdlib> Interpreter<S> {
+impl InstructionGenerator {
     pub fn generate_built_in_sub_call_instructions(
-        &self,
-        result: &mut InstructionContext,
+        &mut self,
         name_node: BareNameNode,
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         let (name, pos) = name_node.consume();
         if &name == "SYSTEM" {
             // TODO ensure no args
-            result.instructions.push(Instruction::Halt.at(pos));
+            self.push(Instruction::Halt, pos);
         } else {
-            self.generate_push_unnamed_args_instructions(result, args, pos)?;
-            result.instructions.push(Instruction::PushStack.at(pos));
-            result
-                .instructions
-                .push(Instruction::BuiltInSub(name).at(pos));
+            self.generate_push_unnamed_args_instructions(args, pos)?;
+            self.push(Instruction::PushStack, pos);
+            self.push(Instruction::BuiltInSub(name), pos);
         }
         Ok(())
     }
+}
 
+impl<S: Stdlib> Interpreter<S> {
     pub fn run_built_in_sub(&mut self, name: &CaseInsensitiveString, pos: Location) -> Result<()> {
         if name == "PRINT" {
             let mut print_args: Vec<String> = vec![];

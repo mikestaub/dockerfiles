@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{
-    Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
+    Instruction, InstructionGenerator, Interpreter, InterpreterError, Result, Stdlib, Variant,
 };
 use crate::parser::{ExpressionNode, Name, NameNode};
 
@@ -72,20 +72,22 @@ impl<S: Stdlib> Interpreter<S> {
             panic!("Unknown function {:?}", function_name);
         }
     }
+}
 
+impl InstructionGenerator {
     pub fn generate_built_in_function_call_instructions(
-        &self,
-        result: &mut InstructionContext,
+        &mut self,
         function_name: NameNode,
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         // TODO validate arg len for ENVIRON$
         let pos = function_name.location();
-        self.generate_push_unnamed_args_instructions(result, args, pos)?;
-        result.instructions.push(Instruction::PushStack.at(pos));
-        result
-            .instructions
-            .push(Instruction::BuiltInFunction(function_name.strip_location()).at(pos));
+        self.generate_push_unnamed_args_instructions(args, pos)?;
+        self.push(Instruction::PushStack, pos);
+        self.push(
+            Instruction::BuiltInFunction(function_name.strip_location()),
+            pos,
+        );
         Ok(())
     }
 }

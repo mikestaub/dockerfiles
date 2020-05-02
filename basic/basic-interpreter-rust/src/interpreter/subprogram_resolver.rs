@@ -4,8 +4,8 @@ use crate::interpreter::built_in_subs;
 use crate::interpreter::err_pre_process;
 use crate::interpreter::function_context::*;
 use crate::interpreter::sub_context::*;
-use crate::interpreter::type_resolver_impl::*;
 use crate::interpreter::Result;
+use crate::parser::type_resolver_impl::*;
 use crate::parser::*;
 
 pub fn resolve(program: ProgramNode) -> Result<(ProgramNode, FunctionContext, SubContext)> {
@@ -371,7 +371,7 @@ impl ForNextCounterMatch for TopLevelToken {
             TopLevelToken::SubImplementation(_, _, b) => {
                 StatementNodes::for_next_counter_match(b, resolver)
             }
-            TopLevelToken::DefType(d) => panic!("unexpected, should have been handled earlier"),
+            TopLevelToken::DefType(_) => panic!("unexpected, should have been handled earlier"),
             _ => Ok(()),
         }
     }

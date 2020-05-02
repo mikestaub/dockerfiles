@@ -1,69 +1,48 @@
 use super::{
-    Instruction, InstructionContext, Interpreter, InterpreterError, Result, Stdlib, Variant,
+    Instruction, InstructionGenerator, Interpreter, InterpreterError, Result, Stdlib, Variant,
 };
 use crate::common::*;
 use crate::parser::*;
 
-impl<S: Stdlib> Interpreter<S> {
-    pub fn generate_expression_instructions(
-        &self,
-        result: &mut InstructionContext,
-        e: ExpressionNode,
-    ) -> Result<()> {
-        self._generate_expression_instructions(result, e, false)
+impl InstructionGenerator {
+    pub fn generate_expression_instructions(&mut self, e: ExpressionNode) -> Result<()> {
+        self.do_generate_expression_instructions(e, false)
     }
 
-    pub fn generate_const_expression_instructions(
-        &self,
-        result: &mut InstructionContext,
-        e: ExpressionNode,
-    ) -> Result<()> {
-        self._generate_expression_instructions(result, e, true)
+    pub fn generate_const_expression_instructions(&mut self, e: ExpressionNode) -> Result<()> {
+        self.do_generate_expression_instructions(e, true)
     }
 
-    fn _generate_expression_instructions(
-        &self,
-        result: &mut InstructionContext,
+    fn do_generate_expression_instructions(
+        &mut self,
         e_node: ExpressionNode,
         only_const: bool,
     ) -> Result<()> {
         let (e, pos) = e_node.consume();
         match e {
             Expression::SingleLiteral(s) => {
-                result
-                    .instructions
-                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
             Expression::DoubleLiteral(s) => {
-                result
-                    .instructions
-                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
             Expression::StringLiteral(s) => {
-                result
-                    .instructions
-                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
             Expression::IntegerLiteral(s) => {
-                result
-                    .instructions
-                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
             Expression::LongLiteral(s) => {
-                result
-                    .instructions
-                    .push(Instruction::Load(Variant::from(s)).at(pos));
+                self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
             Expression::VariableName(name) => {
-                if !only_const || result.constants.contains(name.bare_name()) {
-                    result
-                        .instructions
-                        .push(Instruction::CopyVarToA(name).at(pos));
+                if !only_const || self.constants.contains(name.bare_name()) {
+                    self.push(Instruction::CopyVarToA(name), pos);
                     Ok(())
                 } else {
                     Err(InterpreterError::new_with_pos("Invalid constant", pos))
@@ -74,36 +53,34 @@ impl<S: Stdlib> Interpreter<S> {
                     Err(InterpreterError::new_with_pos("Invalid constant", pos))
                 } else {
                     let name_node = n.at(pos);
-                    self.generate_function_call_instructions(result, name_node, args)?;
+                    self.generate_function_call_instructions(name_node, args)?;
                     Ok(())
                 }
             }
             Expression::BinaryExpression(op, left, right) => {
-                result.instructions.push(Instruction::PushRegisters.at(pos));
+                self.push(Instruction::PushRegisters, pos);
                 // TODO this implies right to left evaluation, double check with QBasic reference implementation
-                self._generate_expression_instructions(result, *right, only_const)?;
-                result.instructions.push(Instruction::CopyAToB.at(pos));
-                self._generate_expression_instructions(result, *left, only_const)?;
+                self.do_generate_expression_instructions(*right, only_const)?;
+                self.push(Instruction::CopyAToB, pos);
+                self.do_generate_expression_instructions(*left, only_const)?;
                 match op {
-                    Operand::Plus => result.instructions.push(Instruction::Plus.at(pos)),
-                    Operand::Minus => result.instructions.push(Instruction::Minus.at(pos)),
-                    Operand::LessThan => result.instructions.push(Instruction::LessThan.at(pos)),
-                    Operand::LessOrEqualThan => result
-                        .instructions
-                        .push(Instruction::LessOrEqualThan.at(pos)),
+                    Operand::Plus => self.push(Instruction::Plus, pos),
+                    Operand::Minus => self.push(Instruction::Minus, pos),
+                    Operand::LessThan => self.push(Instruction::LessThan, pos),
+                    Operand::LessOrEqualThan => self.push(Instruction::LessOrEqualThan, pos),
                 }
-                result.instructions.push(Instruction::PopRegisters.at(pos));
+                self.push(Instruction::PopRegisters, pos);
                 Ok(())
             }
             Expression::UnaryExpression(op, child) => {
                 match op {
                     UnaryOperand::Not => {
-                        self._generate_expression_instructions(result, *child, only_const)?;
-                        result.instructions.push(Instruction::NotA.at(pos));
+                        self.do_generate_expression_instructions(*child, only_const)?;
+                        self.push(Instruction::NotA, pos);
                     }
                     UnaryOperand::Minus => {
-                        self._generate_expression_instructions(result, *child, only_const)?;
-                        result.instructions.push(Instruction::NegateA.at(pos));
+                        self.do_generate_expression_instructions(*child, only_const)?;
+                        self.push(Instruction::NegateA, pos);
                     }
                 }
                 Ok(())

@@ -1,19 +1,18 @@
-use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use super::{Instruction, InstructionGenerator, Interpreter, Result, Stdlib};
 use crate::common::*;
 use crate::interpreter::built_in_functions::is_built_in_function;
 use crate::parser::*;
 
-impl<S: Stdlib> Interpreter<S> {
+impl InstructionGenerator {
     pub fn generate_function_call_instructions(
-        &self,
-        result: &mut InstructionContext,
+        &mut self,
         function_name: NameNode,
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         let pos = function_name.location();
 
         if is_built_in_function(function_name.as_ref()) {
-            self.generate_built_in_function_call_instructions(result, function_name, args)?;
+            self.generate_built_in_function_call_instructions(function_name, args)?;
         } else {
             let pos = function_name.location();
             let bare_name: &CaseInsensitiveString = function_name.bare_name();
@@ -22,26 +21,20 @@ impl<S: Stdlib> Interpreter<S> {
                     let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
 
                     self.generate_push_named_args_instructions(
-                        result,
                         &function_impl.parameters,
                         args,
                         pos,
                     )?;
-                    result.instructions.push(Instruction::PushStack.at(pos));
+                    self.push(Instruction::PushStack, pos);
 
-                    let idx = result.instructions.len();
-                    result
-                        .instructions
-                        .push(Instruction::PushRet(idx + 2).at(pos));
-                    result
-                        .instructions
-                        .push(Instruction::UnresolvedJump(label).at(pos));
+                    let idx = self.instructions.len();
+                    self.push(Instruction::PushRet(idx + 2), pos);
+                    self.push(Instruction::UnresolvedJump(label), pos);
                     // TODO provide fallback if variant is missing
                 }
                 None => {
                     // undefined function is okay as long as no parameter is a string
                     self.generate_built_in_function_call_instructions(
-                        result,
                         Name::Qualified(QualifiedName::new(
                             CaseInsensitiveString::new("_Undefined_".to_string()),
                             TypeQualifier::PercentInteger,
@@ -52,34 +45,29 @@ impl<S: Stdlib> Interpreter<S> {
                 }
             }
         }
-        result.instructions.push(Instruction::PopStack.at(pos));
-        result.instructions.push(Instruction::CopyResultToA.at(pos));
+        self.push(Instruction::PopStack, pos);
+        self.push(Instruction::CopyResultToA, pos);
         Ok(())
     }
 
     pub fn generate_push_named_args_instructions(
-        &self,
-        result: &mut InstructionContext,
+        &mut self,
         param_names: &Vec<QualifiedName>,
         expressions: Vec<ExpressionNode>,
         pos: Location,
     ) -> Result<()> {
         // TODO validate arg count and param count match
         // TODO validate cast if by val, same type if by ref
-        result.instructions.push(Instruction::PreparePush.at(pos));
+        self.push(Instruction::PreparePush, pos);
         for (n, e_node) in param_names.iter().zip(expressions.into_iter()) {
             let (e, pos) = e_node.consume();
             match e {
                 Expression::VariableName(v_name) => {
-                    result
-                        .instructions
-                        .push(Instruction::SetNamedRefParam(n.clone(), v_name).at(pos));
+                    self.push(Instruction::SetNamedRefParam(n.clone(), v_name), pos);
                 }
                 _ => {
-                    self.generate_expression_instructions(result, e.at(pos))?;
-                    result
-                        .instructions
-                        .push(Instruction::SetNamedValParam(n.clone()).at(pos));
+                    self.generate_expression_instructions(e.at(pos))?;
+                    self.push(Instruction::SetNamedValParam(n.clone()), pos);
                 }
             }
         }
@@ -87,25 +75,20 @@ impl<S: Stdlib> Interpreter<S> {
     }
 
     pub fn generate_push_unnamed_args_instructions(
-        &self,
-        result: &mut InstructionContext,
+        &mut self,
         expressions: Vec<ExpressionNode>,
         pos: Location,
     ) -> Result<()> {
-        result.instructions.push(Instruction::PreparePush.at(pos));
+        self.push(Instruction::PreparePush, pos);
         for e_node in expressions.into_iter() {
             let (e, pos) = e_node.consume();
             match e {
                 Expression::VariableName(v_name) => {
-                    result
-                        .instructions
-                        .push(Instruction::PushUnnamedRefParam(v_name).at(pos));
+                    self.push(Instruction::PushUnnamedRefParam(v_name), pos);
                 }
                 _ => {
-                    self.generate_expression_instructions(result, e.at(pos))?;
-                    result
-                        .instructions
-                        .push(Instruction::PushUnnamedValParam.at(pos));
+                    self.generate_expression_instructions(e.at(pos))?;
+                    self.push(Instruction::PushUnnamedValParam, pos);
                 }
             }
         }

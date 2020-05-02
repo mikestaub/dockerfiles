@@ -1,17 +1,16 @@
-use super::{Instruction, InstructionContext, Interpreter, Result, Stdlib};
+use super::{Instruction, InstructionGenerator, Interpreter, Result, Stdlib};
 use crate::common::*;
 use crate::parser::*;
 
-impl<S: Stdlib> Interpreter<S> {
+impl InstructionGenerator {
     pub fn generate_assignment_instructions(
-        &self,
-        results: &mut InstructionContext,
+        &mut self,
         l: NameNode,
         r: ExpressionNode,
     ) -> Result<()> {
-        self.generate_expression_instructions(results, r)?;
+        self.generate_expression_instructions(r)?;
         let pos = l.location();
-        results.push(Instruction::Store(l.strip_location()), pos);
+        self.push(Instruction::Store(l.strip_location()), pos);
         Ok(())
     }
 }
