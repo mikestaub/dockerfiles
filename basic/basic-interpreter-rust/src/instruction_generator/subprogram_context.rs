@@ -1,7 +1,13 @@
+use super::{err, Result};
 use crate::common::*;
-use crate::interpreter::{err_pre_process, Result};
 use crate::parser::*;
 use std::collections::HashMap;
+
+pub type QualifiedFunctionImplementationNode = QualifiedImplementationNode<QualifiedName>;
+pub type FunctionContext = SubprogramContext<QualifiedName>;
+
+//pub type QualifiedSubImplementationNode = QualifiedImplementationNode<CaseInsensitiveString>;
+pub type SubContext = SubprogramContext<CaseInsensitiveString>;
 
 #[derive(Debug, Clone)]
 pub struct QualifiedDeclarationNode<T: NameTrait> {
@@ -136,7 +142,7 @@ impl<T: NameTrait> SubprogramContext<T> {
     pub fn ensure_all_declared_programs_are_implemented(&self) -> Result<()> {
         for (k, v) in self.declarations.iter() {
             if !self.implementations.contains_key(k) {
-                return err_pre_process("Subprogram not defined", v.pos);
+                return err("Subprogram not defined", v.pos);
             }
         }
         Ok(())
@@ -192,7 +198,7 @@ impl<T: NameTrait> SubprogramContext<T> {
     ) -> Result<()> {
         let bare_name: &CaseInsensitiveString = name_node.bare_name();
         if self.has_implementation(bare_name) {
-            err_pre_process("Duplicate definition", pos)
+            err("Duplicate definition", pos)
         } else {
             self.validate_against_existing_declaration(&name_node, &parameters, pos, resolver)?;
             let resolved_name: T = TName::resolve_into(&name_node, resolver);
@@ -228,7 +234,7 @@ impl<T: NameTrait> SubprogramContext<T> {
                 if existing_declaration.is_qualified()
                     && existing_declaration.opt_qualifier().unwrap() != resolver.resolve(name_node)
                 {
-                    err_pre_process("Duplicate definition", pos)
+                    err("Duplicate definition", pos)
                 } else {
                     require_parameters_same(
                         &existing_declaration.parameters,
@@ -251,14 +257,14 @@ fn require_parameters_same<T: TypeResolver>(
     resolver: &T,
 ) -> Result<()> {
     if existing.len() != parameters.len() {
-        return err_pre_process("Argument-count mismatch", pos);
+        return err("Argument-count mismatch", pos);
     }
 
     for i in 0..existing.len() {
         let e = &existing[i];
         let n = &parameters[i];
         if e.qualifier() != resolver.resolve(n) {
-            return err_pre_process("Parameter type mismatch", n.location());
+            return err("Parameter type mismatch", n.location());
         }
     }
 
@@ -367,11 +373,11 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for Statement {
                                 if result_name.opt_qualifier().unwrap() == q.qualifier() {
                                     Ok(Self::InternalSetReturnValue(right))
                                 } else {
-                                    err_pre_process("Duplicate definition", Location::zero())
+                                    err("Duplicate definition", Location::zero())
                                 }
                             } else {
                                 // sub
-                                err_pre_process("Duplicate definition", Location::zero())
+                                err("Duplicate definition", Location::zero())
                             }
                         } else {
                             Ok(Self::Assignment(left, right))
@@ -388,14 +394,14 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for Statement {
                     Name::Bare(b) => {
                         if b == result_name.bare_name() {
                             // CONST cannot match function result name
-                            err_pre_process("Duplicate definition", left.location())
+                            err("Duplicate definition", left.location())
                         } else {
                             Ok(Self::Const(left, right))
                         }
                     }
                     Name::Qualified(q) => {
                         if q.bare_name() == result_name.bare_name() {
-                            err_pre_process("Duplicate definition", left.location())
+                            err("Duplicate definition", left.location())
                         } else {
                             Ok(Self::Const(left, right))
                         }

@@ -1,6 +1,6 @@
 use crate::common::*;
-use crate::interpreter::Variant;
 use crate::parser::{DefType, Name, QualifiedName, TypeQualifier};
+use crate::variant::Variant;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -16,7 +16,7 @@ pub enum Instruction {
     /// Adds registers A and B and stores the results into register A
     Plus,
     Minus,
-    EqualTo,
+    //EqualTo,
     LessOrEqualThan,
     LessThan,
     GreaterThan,

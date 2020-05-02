@@ -1,9 +1,10 @@
-use super::{Instruction, InstructionNode, InterpreterError, Result, Variant};
+use super::error::*;
+use super::instruction::*;
+use super::subprogram_context::*;
+use super::subprogram_resolver;
 use crate::common::*;
-use crate::interpreter::function_context::FunctionContext;
-use crate::interpreter::sub_context::SubContext;
-use crate::interpreter::subprogram_resolver;
 use crate::parser::*;
+use crate::variant::Variant;
 
 use std::collections::HashMap;
 
@@ -114,7 +115,7 @@ impl InstructionGenerator {
                         *instruction_node = Instruction::Jump(*idx).at(pos);
                     }
                     None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
+                        return err("Label not found", pos);
                     }
                 }
             } else if let Instruction::UnresolvedJumpIfFalse(x) = instruction {
@@ -123,7 +124,7 @@ impl InstructionGenerator {
                         *instruction_node = Instruction::JumpIfFalse(*idx).at(pos);
                     }
                     None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
+                        return err("Label not found", pos);
                     }
                 }
             } else if let Instruction::SetUnresolvedErrorHandler(x) = instruction {
@@ -132,7 +133,7 @@ impl InstructionGenerator {
                         *instruction_node = Instruction::SetErrorHandler(*idx).at(pos);
                     }
                     None => {
-                        return Err(InterpreterError::new_with_pos("Label not found", pos));
+                        return err("Label not found", pos);
                     }
                 }
             }
@@ -209,90 +210,15 @@ impl InstructionGenerator {
             pos,
         );
     }
+
+    pub fn generate_assignment_instructions(
+        &mut self,
+        l: NameNode,
+        r: ExpressionNode,
+    ) -> Result<()> {
+        self.generate_expression_instructions(r)?;
+        let pos = l.location();
+        self.push(Instruction::Store(l.strip_location()), pos);
+        Ok(())
+    }
 }
-
-// impl Visitor<QStatementNode> for Emitter {
-//     fn visit(&mut self, a: &QStatementNode) -> Result<()> {
-//         match a {
-//             QStatementNode::Assignment(l, r) => {
-//                 self.visit(r)?;
-//                 self.push(Instruction::Store(l.as_ref().clone()), l.location());
-//                 Ok(())
-//             }
-//             _ => unimplemented!(),
-//         }
-//     }
-// }
-
-// impl Visitor<QExpressionNode> for Emitter {
-//     fn visit(&mut self, a: &QExpressionNode) -> Result<()> {
-//         match a {
-
-//         }
-//     }
-// }
-
-// impl Visitor<QProgramNode> for Emitter {
-//     fn visit(&mut self, a: &QProgramNode) -> Result<()> {
-//         // first loop: top level statements
-//         for x in a.iter() {
-//             match x {
-//                 QTopLevelTokenNode::Statement(s) => self.visit(s)?,
-//                 _ => ()
-//             }
-//         }
-
-//         // add HALT instruction at end of program to separate from the functions and subs
-//         // TODO: nice to have: use location of last statement
-//         self
-//         .instructions
-//         .push(Instruction::Halt.at(Location::new(1, 1)));
-
-//         // then functions and subs
-//         for x in a.iter() {
-//             match x {
-//                 QTopLevelTokenNode::FunctionImplementation(n, params, block, pos) => {
-//                     self.visit(&(n, params, block, pos))?;
-//                 }
-//                 QTopLevelTokenNode::SubImplementation(n, params, block, pos) => {
-//                     self.visit(&(n, params, block, pos))?;
-//                 }
-//             }
-//         }
-//         Ok(())
-//     }
-// }
-
-// // function implementation
-// impl Visitor<(&QNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)> for Emitter {
-//     fn visit(&mut self, f: &(&QNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)) -> Result<()> {
-//         let (name, params, block, pos) = *f;
-//         let label = CaseInsensitiveString::new(format!(":fun:{}", name.bare_name()));
-//         self.push(Instruction::Label(label), *pos);
-//         // set default value
-//         self.push(
-//             Instruction::Load(Variant::default_variant(name.qualifier())), *pos
-//         );
-//         self
-//             .push(Instruction::StoreAToResult, *pos);
-//         self.visit(block)?;
-//         self.push(Instruction::PopRet, *pos);
-//         Ok(())
-//     }
-// }
-
-// // sub implementation
-// impl Visitor<(&BareNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)> for Emitter {
-//     fn visit(&mut self, f: &(&BareNameNode, &Vec<QNameNode>, &QStatementNodes, &Location)) -> Result<()> {
-//         let (name, params, block, pos) = *f;
-//         let label = CaseInsensitiveString::new(format!(":sub:{}", name.bare_name()));
-//         self.push(Instruction::Label(label), *pos);
-//         self.visit(block)?;
-//         self.push(Instruction::PopRet, *pos);
-//         Ok(())
-//     }
-// }
-
-// impl PostVisitor<Vec<QStatementNode>> for Emitter {
-//     fn post_visit(&mut self, a: &Vec<QStatementNode>) ->Result<()> { Ok(()) }
-// }

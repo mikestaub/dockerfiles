@@ -1,4 +1,4 @@
-use super::{Instruction, InstructionGenerator, Interpreter, Result, Stdlib};
+use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
 use crate::parser::{Statement, StatementNode, StatementNodes};
 

@@ -10,6 +10,8 @@ pub struct InterpreterError {
     stacktrace: Stacktrace,
 }
 
+pub type Result<T> = std::result::Result<T, InterpreterError>;
+
 impl InterpreterError {
     pub fn new<S: AsRef<str>>(msg: S, stacktrace: Stacktrace) -> InterpreterError {
         InterpreterError {
@@ -50,13 +52,6 @@ impl InterpreterError {
     pub fn message(&self) -> &String {
         &self.message
     }
-}
-
-pub fn err_pre_process<T, S: AsRef<str>>(msg: S, pos: Location) -> Result<T, InterpreterError> {
-    Err(InterpreterError::new(
-        format!("[P] {}", msg.as_ref()),
-        vec![pos],
-    ))
 }
 
 #[cfg(test)]

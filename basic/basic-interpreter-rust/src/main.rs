@@ -1,14 +1,16 @@
+mod casting;
 mod common;
+mod instruction_generator;
 mod interpreter;
 mod lexer;
 mod linter;
 mod parser;
 mod reader;
+mod variant;
 
 use std::env;
 use std::fs::File;
 
-use interpreter::instruction_generator;
 use interpreter::{DefaultStdlib, Interpreter};
 use parser::Parser;
 

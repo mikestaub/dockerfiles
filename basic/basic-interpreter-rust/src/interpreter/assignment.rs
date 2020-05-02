@@ -1,41 +1,14 @@
-use super::{Instruction, InstructionGenerator, Interpreter, Result, Stdlib};
-use crate::common::*;
-use crate::parser::*;
-
-impl InstructionGenerator {
-    pub fn generate_assignment_instructions(
-        &mut self,
-        l: NameNode,
-        r: ExpressionNode,
-    ) -> Result<()> {
-        self.generate_expression_instructions(r)?;
-        let pos = l.location();
-        self.push(Instruction::Store(l.strip_location()), pos);
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::assert_has_variable;
     use crate::interpreter::test_utils::*;
-    use crate::interpreter::*;
-    use crate::parser::*;
+    use crate::variant::Variant;
 
     mod assignment {
         use super::*;
 
         #[test]
         fn test_assign_literal_to_unqualified_float() {
-            assert_eq!(
-                generate_instructions("X = 1.0"),
-                vec![
-                    Instruction::Load(Variant::VSingle(1.0_f32)),
-                    Instruction::Store(Name::from("X")),
-                    Instruction::Halt,
-                ]
-            );
-
             assert_assign("X").literal("1.0").assert_eq(1.0_f32);
             assert_assign("X").literal("-1.0").assert_eq(-1.0_f32);
             assert_assign("X").literal(".5").assert_eq(0.5_f32);
@@ -47,20 +20,6 @@ mod tests {
 
         #[test]
         fn test_assign_plus_expression_to_unqualified_float() {
-            assert_eq!(
-                generate_instructions("X = .5 + .4"),
-                vec![
-                    Instruction::PushRegisters,
-                    Instruction::Load(Variant::VSingle(0.4_f32)),
-                    Instruction::CopyAToB,
-                    Instruction::Load(Variant::VSingle(0.5_f32)),
-                    Instruction::Plus,
-                    Instruction::PopRegisters,
-                    Instruction::Store(Name::from("X")),
-                    Instruction::Halt,
-                ]
-            );
-
             assert_assign("X")
                 .literal(".5 + .5")
                 .assert_eq(Variant::from(1.0_f32));

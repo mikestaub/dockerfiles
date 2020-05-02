@@ -1,34 +1,7 @@
-use super::{Instruction, InstructionGenerator, Result};
-use crate::parser::{ExpressionNode, Name, NameNode};
-
-impl InstructionGenerator {
-    pub fn generate_const_instructions(
-        &mut self,
-        left: NameNode,
-        right: ExpressionNode,
-    ) -> Result<()> {
-        let (name, pos) = left.consume();
-        self.generate_const_expression_instructions(right)?;
-        match name {
-            Name::Bare(bare_name) => {
-                self.push(Instruction::StoreConst(bare_name.clone()), pos);
-                self.constants.push(bare_name);
-            }
-            Name::Qualified(qualified_name) => {
-                let (bare_name, qualifier) = qualified_name.consume();
-                self.push(Instruction::Cast(qualifier), pos);
-                self.push(Instruction::StoreConst(bare_name.clone()), pos);
-                self.constants.push(bare_name);
-            }
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
-    use crate::common::Location;
+    use crate::common::*;
     use crate::interpreter::InterpreterError;
 
     mod unqualified_integer_declaration {
@@ -261,10 +234,7 @@ mod tests {
             CONST A = X + 1
             PRINT A
             "#;
-            assert_eq!(
-                instruction_generator_err(program),
-                InterpreterError::new_with_pos("Invalid constant", Location::new(3, 23))
-            );
+            assert_pre_process_err!(program, "Invalid constant", 3, 23);
         }
     }
 

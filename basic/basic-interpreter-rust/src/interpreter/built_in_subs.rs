@@ -1,35 +1,11 @@
 use crate::common::*;
 use crate::interpreter::context::Argument;
 use crate::interpreter::context_owner::ContextOwner;
-use crate::interpreter::{
-    Instruction, InstructionGenerator, Interpreter, InterpreterError, Result, Stdlib, Variant,
-};
+use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
 use crate::parser::{
     BareNameNode, Expression, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver,
 };
-
-pub fn is_built_in_sub(sub_name: &CaseInsensitiveString) -> bool {
-    sub_name == "ENVIRON" || sub_name == "PRINT" || sub_name == "INPUT" || sub_name == "SYSTEM"
-}
-
-impl InstructionGenerator {
-    pub fn generate_built_in_sub_call_instructions(
-        &mut self,
-        name_node: BareNameNode,
-        args: Vec<ExpressionNode>,
-    ) -> Result<()> {
-        let (name, pos) = name_node.consume();
-        if &name == "SYSTEM" {
-            // TODO ensure no args
-            self.push(Instruction::Halt, pos);
-        } else {
-            self.generate_push_unnamed_args_instructions(args, pos)?;
-            self.push(Instruction::PushStack, pos);
-            self.push(Instruction::BuiltInSub(name), pos);
-        }
-        Ok(())
-    }
-}
+use crate::variant::Variant;
 
 impl<S: Stdlib> Interpreter<S> {
     pub fn run_built_in_sub(&mut self, name: &CaseInsensitiveString, pos: Location) -> Result<()> {
@@ -46,23 +22,19 @@ impl<S: Stdlib> Interpreter<S> {
             self.stdlib.print(print_args);
             Ok(())
         } else if name == "ENVIRON" {
-            self._do_environ_sub(
+            self.do_environ_sub(
                 // TODO cleanup
                 &name.clone().at(pos),
                 &vec![Expression::from("").at(pos)],
             )
         } else if name == "INPUT" {
-            self._do_input(pos)
-        } else if name == "SYSTEM" {
-            // TODO: remove after migrated to ng
-            self.stdlib.system();
-            Ok(())
+            self.do_input(pos)
         } else {
             panic!("Unknown sub {}", name)
         }
     }
 
-    fn _do_environ_sub(
+    fn do_environ_sub(
         &mut self,
         sub_name_node: &BareNameNode,
         args: &Vec<ExpressionNode>,
@@ -92,12 +64,12 @@ impl<S: Stdlib> Interpreter<S> {
         }
     }
 
-    fn _do_input(&mut self, pos: Location) -> Result<()> {
+    fn do_input(&mut self, pos: Location) -> Result<()> {
         loop {
             match &self.context_mut().demand_sub().pop_front_unnamed_arg() {
                 Some(a) => match a {
                     Argument::ByRef(n) => {
-                        self._do_input_one_var(a, n, pos)?;
+                        self.do_input_one_var(a, n, pos)?;
                     }
                     _ => {
                         return Err(InterpreterError::new_with_pos("Expected variable", pos));
@@ -111,7 +83,7 @@ impl<S: Stdlib> Interpreter<S> {
         Ok(())
     }
 
-    fn _do_input_one_var(&mut self, a: &Argument, n: &QualifiedName, pos: Location) -> Result<()> {
+    fn do_input_one_var(&mut self, a: &Argument, n: &QualifiedName, pos: Location) -> Result<()> {
         let raw_input: String = self
             .stdlib
             .input()

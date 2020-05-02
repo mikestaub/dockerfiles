@@ -1,10 +1,8 @@
+use super::built_in_functions;
+use super::built_in_subs;
+use super::subprogram_context::*;
+use super::{err, Result};
 use crate::common::*;
-use crate::interpreter::built_in_functions;
-use crate::interpreter::built_in_subs;
-use crate::interpreter::err_pre_process;
-use crate::interpreter::function_context::*;
-use crate::interpreter::sub_context::*;
-use crate::interpreter::Result;
 use crate::parser::type_resolver_impl::*;
 use crate::parser::*;
 
@@ -86,7 +84,7 @@ impl AllSubsKnown for Statement {
                 if built_in_subs::is_built_in_sub(n) || sub_context.has_implementation(n) {
                     Ok(())
                 } else {
-                    err_pre_process(format!("Unknown SUB {}", n), Location::zero())
+                    err(format!("Unknown SUB {}", n), Location::zero())
                 }
             }
             Statement::ForLoop(f) => StatementNodes::all_subs_known(&f.statements, sub_context),
@@ -194,7 +192,7 @@ fn check_function_return_type_on_call(
             if q == func_impl.qualifier() {
                 Ok(())
             } else {
-                err_pre_process("Duplicate definition", call_name.location())
+                err("Duplicate definition", call_name.location())
             }
         }
     }
@@ -206,7 +204,7 @@ fn check_function_args_on_call(
     func_impl: &QualifiedFunctionImplementationNode,
 ) -> Result<()> {
     if func_impl.parameters.len() != args.len() {
-        err_pre_process("Argument count mismatch", call_name.location())
+        err("Argument count mismatch", call_name.location())
     } else {
         Ok(())
     }
@@ -312,9 +310,7 @@ impl NoFunctionInConst for ExpressionNode {
     fn no_function_in_const(e_node: &Self) -> Result<()> {
         let e: &Expression = e_node.as_ref();
         match e {
-            Expression::FunctionCall(_, _) => {
-                err_pre_process("Invalid constant", e_node.location())
-            }
+            Expression::FunctionCall(_, _) => err("Invalid constant", e_node.location()),
             Expression::BinaryExpression(_, left, right) => {
                 let unboxed_left: &Self = left;
                 let unboxed_right: &Self = right;
@@ -389,7 +385,7 @@ impl ForNextCounterMatch for Statement {
                         if n.eq_resolve(&f.variable_name, resolver) {
                             Ok(())
                         } else {
-                            err_pre_process("NEXT without FOR", n.location())
+                            err("NEXT without FOR", n.location())
                         }
                     }
                     None => Ok(()),

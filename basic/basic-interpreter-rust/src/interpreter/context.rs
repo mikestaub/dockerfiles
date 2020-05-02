@@ -1,7 +1,8 @@
-use super::{InterpreterError, Result, Variant};
+use super::{InterpreterError, Result};
+use crate::casting::cast;
 use crate::common::{CaseInsensitiveString, HasLocation, Location};
-use crate::interpreter::casting::cast;
 use crate::parser::*;
+use crate::variant::Variant;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;

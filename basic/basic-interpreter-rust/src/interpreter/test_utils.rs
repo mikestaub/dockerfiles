@@ -1,24 +1,11 @@
 use crate::common::*;
+use crate::instruction_generator;
 use crate::interpreter::context_owner::ContextOwner;
-use crate::interpreter::instruction_generator;
-use crate::interpreter::variant::Variant;
-use crate::interpreter::{Instruction, Interpreter, InterpreterError, Result, Stdlib};
+use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
 use crate::parser::{Name, NameNode, Parser};
+use crate::variant::Variant;
 use std::collections::HashMap;
 use std::fs::File;
-
-pub fn generate_instructions<T>(input: T) -> Vec<Instruction>
-where
-    T: AsRef<[u8]>,
-{
-    let mut parser = Parser::from(input);
-    let program = parser.parse().unwrap();
-    instruction_generator::generate_instructions(program)
-        .unwrap()
-        .into_iter()
-        .map(|x| x.consume().0)
-        .collect()
-}
 
 pub fn interpret<T>(input: T) -> Interpreter<MockStdlib>
 where
@@ -49,7 +36,7 @@ where
         .unwrap()
 }
 
-pub fn instruction_generator_err<T>(input: T) -> InterpreterError
+pub fn instruction_generator_err<T>(input: T) -> instruction_generator::Error
 where
     T: AsRef<[u8]>,
 {
@@ -246,7 +233,7 @@ macro_rules! assert_pre_process_err {
     ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
         assert_eq!(
             instruction_generator_err($program),
-            InterpreterError::new_with_pos(
+            Locatable::new(
                 format!("[P] {}", $expected_msg),
                 Location::new($expected_row, $expected_col)
             )
