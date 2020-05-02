@@ -1,10 +1,16 @@
+use super::{NameTrait, TypeQualifier};
 use crate::common::{CaseInsensitiveString, Locatable};
 
-pub type BareNameNode = Locatable<CaseInsensitiveString>;
+pub type BareName = CaseInsensitiveString;
+pub type BareNameNode = Locatable<BareName>;
 
-impl From<BareNameNode> for CaseInsensitiveString {
-    fn from(n: BareNameNode) -> CaseInsensitiveString {
-        n.consume().0
+impl NameTrait for BareName {
+    fn bare_name(&self) -> &CaseInsensitiveString {
+        self
+    }
+
+    fn opt_qualifier(&self) -> Option<TypeQualifier> {
+        None
     }
 }
 

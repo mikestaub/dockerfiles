@@ -1,18 +1,13 @@
-use super::{QualifiedName, TypeQualifier};
+use super::{QualifiedName, TypeQualifier, TypeResolver};
 use crate::common::*;
-
-pub trait TypeResolver {
-    fn resolve<T: NameTrait>(&self, name: &T) -> TypeQualifier;
-}
-
-pub trait HasQualifier {
-    fn qualifier(&self) -> TypeQualifier;
-}
 
 pub trait NameTrait: Sized + std::fmt::Debug + Clone {
     fn bare_name(&self) -> &CaseInsensitiveString;
-    fn is_qualified(&self) -> bool;
     fn opt_qualifier(&self) -> Option<TypeQualifier>;
+
+    fn is_qualified(&self) -> bool {
+        self.opt_qualifier().is_some()
+    }
 
     fn to_qualified_name<T: TypeResolver>(&self, resolver: &T) -> QualifiedName {
         QualifiedName::new(self.bare_name().clone(), resolver.resolve(self))
@@ -28,11 +23,5 @@ pub trait NameTrait: Sized + std::fmt::Debug + Clone {
             Some(q) => q == other,
             None => true,
         }
-    }
-}
-
-impl<T: std::fmt::Debug + Sized + HasQualifier> HasQualifier for Locatable<T> {
-    fn qualifier(&self) -> TypeQualifier {
-        self.as_ref().qualifier()
     }
 }

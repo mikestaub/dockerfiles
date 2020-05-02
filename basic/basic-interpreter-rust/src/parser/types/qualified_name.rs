@@ -35,10 +35,6 @@ impl NameTrait for QualifiedName {
         &self.name
     }
 
-    fn is_qualified(&self) -> bool {
-        true
-    }
-
     fn opt_qualifier(&self) -> Option<TypeQualifier> {
         Some(self.qualifier)
     }

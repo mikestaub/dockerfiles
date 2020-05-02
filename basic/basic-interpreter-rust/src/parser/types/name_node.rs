@@ -23,10 +23,6 @@ impl<T: NameTrait> NameTrait for Locatable<T> {
         self.as_ref().bare_name()
     }
 
-    fn is_qualified(&self) -> bool {
-        self.as_ref().is_qualified()
-    }
-
     fn opt_qualifier(&self) -> Option<TypeQualifier> {
         self.as_ref().opt_qualifier()
     }

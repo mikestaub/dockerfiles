@@ -61,10 +61,6 @@ impl<T: NameTrait> NameTrait for QualifiedDeclarationNode<T> {
         self.name.bare_name()
     }
 
-    fn is_qualified(&self) -> bool {
-        self.name.is_qualified()
-    }
-
     fn opt_qualifier(&self) -> Option<TypeQualifier> {
         self.name.opt_qualifier()
     }
@@ -110,10 +106,6 @@ impl<T: NameTrait> HasLocation for QualifiedImplementationNode<T> {
 impl<T: NameTrait> NameTrait for QualifiedImplementationNode<T> {
     fn bare_name(&self) -> &CaseInsensitiveString {
         self.name.bare_name()
-    }
-
-    fn is_qualified(&self) -> bool {
-        self.name.is_qualified()
     }
 
     fn opt_qualifier(&self) -> Option<TypeQualifier> {

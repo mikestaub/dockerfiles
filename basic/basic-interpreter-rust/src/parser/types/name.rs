@@ -9,32 +9,11 @@ pub enum Name {
     Typed(QualifiedName),
 }
 
-impl NameTrait for CaseInsensitiveString {
-    fn bare_name(&self) -> &CaseInsensitiveString {
-        self
-    }
-
-    fn is_qualified(&self) -> bool {
-        false
-    }
-
-    fn opt_qualifier(&self) -> Option<TypeQualifier> {
-        None
-    }
-}
-
 impl NameTrait for Name {
     fn bare_name(&self) -> &CaseInsensitiveString {
         match self {
             Self::Bare(b) => b,
             Self::Typed(t) => t.bare_name(),
-        }
-    }
-
-    fn is_qualified(&self) -> bool {
-        match self {
-            Self::Bare(_) => false,
-            Self::Typed(_) => true,
         }
     }
 
