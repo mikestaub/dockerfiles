@@ -91,7 +91,7 @@ impl<T: BufRead> Parser<T> {
             }
             LexemeNode::Symbol(ch, _) => match TypeQualifier::try_from(ch) {
                 Ok(q) => self._demand_assignment_or_sub_call_with_qualified_name(NameNode::new(
-                    Name::Typed(QualifiedName::new(bare_name, q)),
+                    Name::Qualified(QualifiedName::new(bare_name, q)),
                     bare_name_pos,
                 )),
                 Err(_) => unexpected("Expected type qualifier", next),

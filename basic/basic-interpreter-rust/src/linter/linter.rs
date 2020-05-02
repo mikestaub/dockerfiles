@@ -642,7 +642,7 @@ impl Converter<Name, QualifiedName> for Linter {
                 let qualifier = self.resolver.resolve(&b);
                 Ok(QualifiedName::new(b, qualifier))
             }
-            Name::Typed(q) => Ok(q),
+            Name::Qualified(q) => Ok(q),
         }
     }
 }

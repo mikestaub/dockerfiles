@@ -346,7 +346,7 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
                             Ok(Self::Assignment(left, right))
                         }
                     }
-                    Name::Typed(q) => {
+                    Name::Qualified(q) => {
                         if q.bare_name() == result_name.bare_name() {
                             // bare name is equal to result name bare name
                             if result_name.is_qualified() {
@@ -380,7 +380,7 @@ impl<T: NameTrait> AssignmentToSetReturnValue<T> for StatementNode {
                             Ok(Self::Const(left, right, pos))
                         }
                     }
-                    Name::Typed(q) => {
+                    Name::Qualified(q) => {
                         if q.bare_name() == result_name.bare_name() {
                             err_pre_process("Duplicate definition", left.location())
                         } else {

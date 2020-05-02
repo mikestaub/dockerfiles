@@ -412,7 +412,7 @@ impl<T: TypeResolver> RootContext<T> {
                 bare_name = b;
                 casted = value;
             }
-            Name::Typed(q) => {
+            Name::Qualified(q) => {
                 bare_name = q.bare_name();
                 let qualifier = q.qualifier();
                 casted = do_cast(value, qualifier, pos)?;
@@ -689,7 +689,7 @@ impl<T: TypeResolver> SubContext<T> {
                 bare_name = b;
                 casted = value;
             }
-            Name::Typed(q) => {
+            Name::Qualified(q) => {
                 bare_name = q.bare_name();
                 let qualifier = q.qualifier();
                 casted = do_cast(value, qualifier, pos)?;

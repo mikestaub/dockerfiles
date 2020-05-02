@@ -11,7 +11,7 @@ impl NameNode {
     ) -> Self {
         let s = CaseInsensitiveString::new(word);
         let n = match optional_type_qualifier {
-            Some(q) => Name::Typed(QualifiedName::new(s, q)),
+            Some(q) => Name::Qualified(QualifiedName::new(s, q)),
             None => Name::Bare(s),
         };
         NameNode::new(n, pos)

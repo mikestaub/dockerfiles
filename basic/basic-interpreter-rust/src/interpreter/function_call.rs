@@ -42,7 +42,7 @@ impl<S: Stdlib> Interpreter<S> {
                     // undefined function is okay as long as no parameter is a string
                     self.generate_built_in_function_call_instructions(
                         result,
-                        Name::Typed(QualifiedName::new(
+                        Name::Qualified(QualifiedName::new(
                             CaseInsensitiveString::new("_Undefined_".to_string()),
                             TypeQualifier::PercentInteger,
                         ))

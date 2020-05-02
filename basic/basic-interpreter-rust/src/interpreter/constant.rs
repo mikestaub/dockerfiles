@@ -18,7 +18,7 @@ impl<S: Stdlib> Interpreter<S> {
                     .push(Instruction::StoreConst(bare_name.clone()).at(pos));
                 result.constants.push(bare_name);
             }
-            Name::Typed(qualified_name) => {
+            Name::Qualified(qualified_name) => {
                 let (bare_name, qualifier) = qualified_name.consume();
                 result
                     .instructions
