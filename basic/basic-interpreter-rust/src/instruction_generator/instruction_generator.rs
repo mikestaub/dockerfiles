@@ -1,23 +1,20 @@
-use super::error::*;
+use super::error::{err, Result};
 use super::instruction::*;
 use super::subprogram_context::*;
 use super::subprogram_resolver;
 use crate::common::*;
-use crate::parser::*;
+use crate::linter::*;
 use crate::variant::Variant;
 
 use std::collections::HashMap;
 
 pub struct InstructionGenerator {
     pub instructions: Vec<InstructionNode>,
-    pub constants: Vec<CaseInsensitiveString>,
     pub function_context: FunctionContext,
     pub sub_context: SubContext,
 }
 
 fn sanitize(original_program: ProgramNode) -> Result<(ProgramNode, FunctionContext, SubContext)> {
-    subprogram_resolver::NoFunctionInConst::no_function_in_const(&original_program)?;
-    subprogram_resolver::for_next_counter_match(&original_program)?;
     let (program, f_c, s_c) = subprogram_resolver::resolve(original_program)?;
     subprogram_resolver::AllSubsKnown::all_subs_known(&program, &s_c)?;
     subprogram_resolver::AllFunctionsKnown::all_functions_known(&program, &f_c)?;
@@ -46,7 +43,6 @@ impl InstructionGenerator {
     pub fn new(function_context: FunctionContext, sub_context: SubContext) -> Self {
         Self {
             instructions: vec![],
-            constants: vec![],
             function_context,
             sub_context,
         }
@@ -58,9 +54,6 @@ impl InstructionGenerator {
             match top_level_token {
                 TopLevelToken::Statement(s) => {
                     self.generate_statement_node_instructions(s.at(pos))?;
-                }
-                TopLevelToken::DefType(d) => {
-                    self.push(Instruction::DefType(d), pos);
                 }
                 _ => unimplemented!(),
             }
@@ -178,42 +171,9 @@ impl InstructionGenerator {
         );
     }
 
-    pub fn store_temp_var<S: AsRef<str>>(&mut self, prefix: S, pos: Location) {
-        self.push(
-            Instruction::Store(Name::Bare(CaseInsensitiveString::new(format!(
-                "{}{:?}",
-                prefix.as_ref(),
-                pos
-            )))),
-            pos,
-        );
-    }
-
-    pub fn copy_temp_var_to_a<S: AsRef<str>>(&mut self, prefix: S, pos: Location) {
-        self.push(
-            Instruction::CopyVarToA(Name::Bare(CaseInsensitiveString::new(format!(
-                "{}{:?}",
-                prefix.as_ref(),
-                pos
-            )))),
-            pos,
-        );
-    }
-
-    pub fn copy_temp_var_to_b<S: AsRef<str>>(&mut self, prefix: S, pos: Location) {
-        self.push(
-            Instruction::CopyVarToB(Name::Bare(CaseInsensitiveString::new(format!(
-                "{}{:?}",
-                prefix.as_ref(),
-                pos
-            )))),
-            pos,
-        );
-    }
-
     pub fn generate_assignment_instructions(
         &mut self,
-        l: NameNode,
+        l: QNameNode,
         r: ExpressionNode,
     ) -> Result<()> {
         self.generate_expression_instructions(r)?;

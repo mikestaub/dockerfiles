@@ -2,7 +2,7 @@
 mod tests {
     use super::super::test_utils::*;
     use crate::assert_has_variable;
-    use crate::assert_pre_process_err;
+    use crate::assert_linter_err;
     use crate::common::*;
     use crate::interpreter::InterpreterError;
     use crate::variant::Variant;
@@ -17,7 +17,7 @@ mod tests {
         END FUNCTION
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 3.0_f32);
+        assert_has_variable!(interpreter, "X!", 3.0_f32);
     }
 
     #[test]
@@ -26,7 +26,7 @@ mod tests {
         DECLARE FUNCTION Add(A, B)
         X = Add(1, 2)
         ";
-        assert_pre_process_err!(program, "Subprogram not defined", 2, 9);
+        assert_linter_err!(program, "Subprogram not defined", 2, 9);
     }
 
     #[test]
@@ -38,7 +38,7 @@ mod tests {
         END FUNCTION
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 3.0_f32);
+        assert_has_variable!(interpreter, "X!", 3.0_f32);
     }
 
     #[test]
@@ -51,7 +51,7 @@ mod tests {
         END FUNCTION
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 0.0_f32);
+        assert_has_variable!(interpreter, "X!", 0.0_f32);
         assert_eq!(interpreter.stdlib.output, vec!["3"]);
     }
 
@@ -61,7 +61,7 @@ mod tests {
         X = Add(1, 2)
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 0.0_f32);
+        assert_has_variable!(interpreter, "X!", 0.0_f32);
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
         END FUNCTION
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 6.0_f32);
+        assert_has_variable!(interpreter, "X!", 6.0_f32);
     }
 
     #[test]
@@ -100,7 +100,7 @@ mod tests {
         END FUNCTION
         ";
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", 6);
+        assert_has_variable!(interpreter, "X%", 6);
     }
 
     #[test]
@@ -114,7 +114,7 @@ mod tests {
         END FUNCTION
         "#;
         let interpreter = interpret(program);
-        assert_has_variable!(interpreter, "X", "123");
+        assert_has_variable!(interpreter, "X$", "123");
     }
 
     #[test]

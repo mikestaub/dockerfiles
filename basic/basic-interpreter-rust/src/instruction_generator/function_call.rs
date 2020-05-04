@@ -1,12 +1,12 @@
 use super::built_in_functions::is_built_in_function;
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::parser::*;
+use crate::linter::*;
 
 impl InstructionGenerator {
     pub fn generate_function_call_instructions(
         &mut self,
-        function_name: NameNode,
+        function_name: QNameNode,
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
         let pos = function_name.location();
@@ -35,10 +35,10 @@ impl InstructionGenerator {
                 None => {
                     // undefined function is okay as long as no parameter is a string
                     self.generate_built_in_function_call_instructions(
-                        Name::Qualified(QualifiedName::new(
+                        QualifiedName::new(
                             CaseInsensitiveString::new("_Undefined_".to_string()),
                             TypeQualifier::PercentInteger,
-                        ))
+                        )
                         .at(pos),
                         args,
                     )?;
@@ -62,7 +62,7 @@ impl InstructionGenerator {
         for (n, e_node) in param_names.iter().zip(expressions.into_iter()) {
             let (e, pos) = e_node.consume();
             match e {
-                Expression::VariableName(v_name) => {
+                Expression::Variable(v_name) => {
                     self.push(Instruction::SetNamedRefParam(n.clone(), v_name), pos);
                 }
                 _ => {
@@ -83,7 +83,7 @@ impl InstructionGenerator {
         for e_node in expressions.into_iter() {
             let (e, pos) = e_node.consume();
             match e {
-                Expression::VariableName(v_name) => {
+                Expression::Variable(v_name) => {
                     self.push(Instruction::PushUnnamedRefParam(v_name), pos);
                 }
                 _ => {

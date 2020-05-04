@@ -1,12 +1,16 @@
 use crate::common::*;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
-use crate::parser::Name;
+use crate::linter::{QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn run_built_in_function(&mut self, function_name: &Name, pos: Location) -> Result<()> {
-        if function_name == &Name::from("ENVIRON$") {
+    pub fn run_built_in_function(
+        &mut self,
+        function_name: &QualifiedName,
+        pos: Location,
+    ) -> Result<()> {
+        if function_name == &QualifiedName::new("ENVIRON", TypeQualifier::DollarString) {
             let v = self.context_mut().demand_sub().pop_front_unnamed(pos)?;
             match v {
                 Variant::VString(env_var_name) => {
@@ -21,7 +25,8 @@ impl<S: Stdlib> Interpreter<S> {
                     pos,
                 )),
             }
-        } else if function_name == &Name::from("_Undefined_%") {
+        } else if function_name == &QualifiedName::new("_Undefined_", TypeQualifier::PercentInteger)
+        {
             loop {
                 match self.context_mut().demand_sub().try_pop_front_unnamed(pos)? {
                     Some(v) => match v {

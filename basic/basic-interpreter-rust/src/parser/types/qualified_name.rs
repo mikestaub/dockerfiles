@@ -1,5 +1,6 @@
 use super::{HasQualifier, NameTrait, TypeQualifier, TypeResolver};
 use crate::common::CaseInsensitiveString;
+use std::convert::TryFrom;
 use std::fmt::Display;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -44,5 +45,15 @@ impl NameTrait for QualifiedName {
 
     fn eq_resolve<T: TypeResolver, U: NameTrait>(&self, other: &U, resolver: &T) -> bool {
         self == &other.to_qualified_name(resolver)
+    }
+}
+
+impl TryFrom<&str> for QualifiedName {
+    type Error = String;
+    fn try_from(s: &str) -> Result<QualifiedName, String> {
+        let mut buf = s.to_owned();
+        let last_ch: char = buf.pop().unwrap();
+        TypeQualifier::try_from(last_ch)
+            .map(|q| QualifiedName::new(CaseInsensitiveString::new(buf), q))
     }
 }

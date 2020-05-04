@@ -1,6 +1,6 @@
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::parser::{BareNameNode, ExpressionNode};
+use crate::linter::{BareNameNode, ExpressionNode};
 
 pub fn is_built_in_sub(sub_name: &CaseInsensitiveString) -> bool {
     sub_name == "ENVIRON" || sub_name == "PRINT" || sub_name == "INPUT" || sub_name == "SYSTEM"

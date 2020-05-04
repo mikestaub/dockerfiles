@@ -1,7 +1,7 @@
 use super::built_in_subs::is_built_in_sub;
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::parser::{BareNameNode, ExpressionNode};
+use crate::linter::{BareNameNode, ExpressionNode};
 
 impl InstructionGenerator {
     pub fn generate_sub_call_instructions(

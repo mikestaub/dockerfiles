@@ -2,9 +2,7 @@ use crate::common::*;
 use crate::interpreter::context::Argument;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
-use crate::parser::{
-    BareNameNode, Expression, ExpressionNode, QualifiedName, TypeQualifier, TypeResolver,
-};
+use crate::linter::{BareNameNode, HasQualifier, QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
 impl<S: Stdlib> Interpreter<S> {
@@ -25,7 +23,7 @@ impl<S: Stdlib> Interpreter<S> {
             self.do_environ_sub(
                 // TODO cleanup
                 &name.clone().at(pos),
-                &vec![Expression::from("").at(pos)],
+                vec![pos],
             )
         } else if name == "INPUT" {
             self.do_input(pos)
@@ -34,11 +32,7 @@ impl<S: Stdlib> Interpreter<S> {
         }
     }
 
-    fn do_environ_sub(
-        &mut self,
-        sub_name_node: &BareNameNode,
-        args: &Vec<ExpressionNode>,
-    ) -> Result<()> {
+    fn do_environ_sub(&mut self, sub_name_node: &BareNameNode, args: Vec<Location>) -> Result<()> {
         match self
             .context_mut()
             .demand_sub()
@@ -49,7 +43,7 @@ impl<S: Stdlib> Interpreter<S> {
                 if parts.len() != 2 {
                     Err(InterpreterError::new_with_pos(
                         "Invalid expression. Must be name=value.",
-                        args[0].location(),
+                        args[0],
                     ))
                 } else {
                     self.stdlib
@@ -57,10 +51,7 @@ impl<S: Stdlib> Interpreter<S> {
                     Ok(())
                 }
             }
-            _ => Err(InterpreterError::new_with_pos(
-                "Type mismatch",
-                args[0].location(),
-            )),
+            _ => Err(InterpreterError::new_with_pos("Type mismatch", args[0])),
         }
     }
 
@@ -88,7 +79,7 @@ impl<S: Stdlib> Interpreter<S> {
             .stdlib
             .input()
             .map_err(|e| InterpreterError::new_with_pos(e.to_string(), pos))?;
-        let q: TypeQualifier = self.type_resolver.resolve(n);
+        let q: TypeQualifier = n.qualifier();
         let variable_value = match q {
             TypeQualifier::BangSingle => Variant::from(
                 parse_single_input(raw_input)

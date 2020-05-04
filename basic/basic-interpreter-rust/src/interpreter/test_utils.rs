@@ -2,9 +2,11 @@ use crate::common::*;
 use crate::instruction_generator;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
-use crate::parser::{Name, NameNode, Parser};
+use crate::linter;
+use crate::parser::{Parser, QualifiedName};
 use crate::variant::Variant;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fs::File;
 
 pub fn interpret<T>(input: T) -> Interpreter<MockStdlib>
@@ -13,7 +15,11 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
-    let instructions = instruction_generator::generate_instructions(program).unwrap();
+    let linted_program = linter::lint(program).unwrap();
+    let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
+    for i in instructions.iter() {
+        //println!("{:?}", i);
+    }
     let mut interpreter = Interpreter::new(MockStdlib::new());
     interpreter
         .interpret(instructions)
@@ -28,12 +34,22 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
-    let instructions = instruction_generator::generate_instructions(program).unwrap();
+    let linted_program = linter::lint(program).unwrap();
+    let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
     let mut interpreter = Interpreter::new(stdlib);
     interpreter
         .interpret(instructions)
         .map(|_| interpreter)
         .unwrap()
+}
+
+pub fn linter_err<T>(input: T) -> linter::Error
+where
+    T: AsRef<[u8]>,
+{
+    let mut parser = Parser::from(input);
+    let program = parser.parse().unwrap();
+    linter::lint(program).unwrap_err()
 }
 
 pub fn instruction_generator_err<T>(input: T) -> instruction_generator::Error
@@ -42,7 +58,8 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
-    instruction_generator::generate_instructions(program).unwrap_err()
+    let linted_program = linter::lint(program).unwrap();
+    instruction_generator::generate_instructions(linted_program).unwrap_err()
 }
 
 pub fn interpret_err<T>(input: T) -> InterpreterError
@@ -51,7 +68,8 @@ where
 {
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
-    let instructions = instruction_generator::generate_instructions(program).unwrap();
+    let linted_program = linter::lint(program).unwrap();
+    let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
     let mut interpreter = Interpreter::new(MockStdlib::new());
     interpreter.interpret(instructions).unwrap_err()
 }
@@ -64,7 +82,8 @@ where
     let file_path = format!("fixtures/{}", filename.as_ref());
     let mut parser = Parser::from(File::open(file_path).expect("Could not read bas file"));
     let program = parser.parse().unwrap();
-    let instructions = instruction_generator::generate_instructions(program).unwrap();
+    let linted_program = linter::lint(program).unwrap();
+    let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
     let mut interpreter = Interpreter::new(stdlib);
     interpreter.interpret(instructions).map(|_| interpreter)
 }
@@ -129,9 +148,10 @@ impl Stdlib for MockStdlib {
 
 impl<S: Stdlib> Interpreter<S> {
     pub fn get_variable_str(&self, name: &str) -> Result<Variant> {
+        let q_name = QualifiedName::try_from(name).unwrap();
         let pos = Location::start();
         self.context_ref()
-            .get_r_value(&Name::from(name).at(pos))
+            .get_r_value(&q_name.at(pos))
             .map(|x| x.unwrap())
     }
 }
@@ -147,26 +167,32 @@ macro_rules! assert_has_variable {
 }
 
 pub struct AssignmentBuilder {
-    variable_name_node: NameNode,
+    variable_literal: String,
     program: String,
+    qualified_variable: String,
 }
 
 impl AssignmentBuilder {
     pub fn new(variable_literal: &str) -> AssignmentBuilder {
         AssignmentBuilder {
-            variable_name_node: Name::from(variable_literal).at(Location::start()),
+            variable_literal: variable_literal.to_owned(),
             program: String::new(),
+            qualified_variable: variable_literal.to_owned(),
         }
     }
 
     pub fn literal(&mut self, expression_literal: &str) -> &mut Self {
         if self.program.is_empty() {
-            let variable_name: Name = self.variable_name_node.clone().strip_location();
-            self.program = format!("{} = {}", variable_name, expression_literal);
+            self.program = format!("{} = {}", self.variable_literal, expression_literal);
             self
         } else {
             panic!("Cannot re-assign program")
         }
+    }
+
+    pub fn qualified_variable(&mut self, v: &str) -> &mut Self {
+        self.qualified_variable = v.to_owned();
+        self
     }
 
     pub fn assert_eq<T>(&self, expected_value: T)
@@ -177,10 +203,12 @@ impl AssignmentBuilder {
             panic!("Program was not set")
         } else {
             let interpreter = interpret(&self.program);
+            let q_name = QualifiedName::try_from(self.qualified_variable.as_ref()).unwrap();
+            let q_node = q_name.at(Location::start());
             assert_eq!(
                 interpreter
                     .context_ref()
-                    .get_r_value(&self.variable_name_node)
+                    .get_r_value(&q_node)
                     .unwrap()
                     .unwrap(),
                 Variant::from(expected_value)
@@ -204,15 +232,19 @@ pub fn assert_assign(variable_literal: &str) -> AssignmentBuilder {
     AssignmentBuilder::new(variable_literal)
 }
 
-pub fn assert_input<T>(raw_input: &str, variable_name: &str, expected_value: T)
-where
+pub fn assert_input<T>(
+    raw_input: &str,
+    variable_literal: &str,
+    qualified_variable: &str,
+    expected_value: T,
+) where
     Variant: From<T>,
 {
     let mut stdlib = MockStdlib::new();
     stdlib.add_next_input(raw_input);
-    let input = format!("INPUT {}", variable_name);
+    let input = format!("INPUT {}", variable_literal);
     let interpreter = interpret_with_stdlib(input, stdlib);
-    assert_has_variable!(interpreter, variable_name, expected_value);
+    assert_has_variable!(interpreter, qualified_variable, expected_value);
 }
 
 #[macro_export]
@@ -229,12 +261,25 @@ macro_rules! assert_err {
 }
 
 #[macro_export]
-macro_rules! assert_pre_process_err {
+macro_rules! assert_instruction_generator_err {
     ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
         assert_eq!(
             instruction_generator_err($program),
             Locatable::new(
-                format!("[P] {}", $expected_msg),
+                format!("[IG] {}", $expected_msg),
+                Location::new($expected_row, $expected_col)
+            )
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! assert_linter_err {
+    ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
+        assert_eq!(
+            linter_err($program),
+            Locatable::new(
+                format!("[L] {}", $expected_msg),
                 Location::new($expected_row, $expected_col)
             )
         );

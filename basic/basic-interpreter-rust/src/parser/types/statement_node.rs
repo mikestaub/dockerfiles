@@ -15,8 +15,6 @@ pub enum Statement {
     ErrorHandler(CaseInsensitiveString),
     Label(CaseInsensitiveString),
     GoTo(CaseInsensitiveString),
-    // TODO remove out of here
-    InternalSetReturnValue(ExpressionNode),
 }
 
 #[derive(Clone, Debug, PartialEq)]

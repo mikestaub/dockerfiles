@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::parser::{DefType, Name, QualifiedName, TypeQualifier};
+use crate::linter::{QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
 #[derive(Debug, PartialEq)]
@@ -7,12 +7,15 @@ pub enum Instruction {
     /// Loads a value into register A
     Load(Variant),
     /// Stores a value from register A
-    Store(Name),
+    Store(QualifiedName),
     /// Stores a value from register A into a constant
-    StoreConst(CaseInsensitiveString),
-    /// Casts register A to the desired type
-    Cast(TypeQualifier),
+    StoreConst(QualifiedName),
     CopyAToB,
+    CopyAToC,
+    CopyAToD,
+    CopyCToB,
+    CopyDToA,
+    CopyDToB,
     /// Adds registers A and B and stores the results into register A
     Plus,
     Minus,
@@ -28,11 +31,9 @@ pub enum Instruction {
     Label(CaseInsensitiveString),
     UnresolvedJump(CaseInsensitiveString),
     UnresolvedJumpIfFalse(CaseInsensitiveString),
-    CopyVarToA(Name),
-    CopyVarToB(Name),
+    CopyVarToA(QualifiedName),
     BuiltInSub(CaseInsensitiveString),
-    BuiltInFunction(Name),
-    DefType(DefType),
+    BuiltInFunction(QualifiedName),
     Halt,
 
     PushRegisters,
@@ -45,12 +46,12 @@ pub enum Instruction {
     PushStack,
     PopStack,
 
-    PushUnnamedRefParam(Name),
+    PushUnnamedRefParam(QualifiedName),
 
     /// Pushes the contents of register A at the end of the unnamed stack
     PushUnnamedValParam,
-
-    SetNamedRefParam(QualifiedName, Name),
+    // TODO disambiguate
+    SetNamedRefParam(QualifiedName, QualifiedName),
     SetNamedValParam(QualifiedName),
 
     Throw(String),

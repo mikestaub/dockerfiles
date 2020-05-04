@@ -9,12 +9,30 @@ mod tests {
 
         #[test]
         fn test_assign_literal_to_unqualified_float() {
-            assert_assign("X").literal("1.0").assert_eq(1.0_f32);
-            assert_assign("X").literal("-1.0").assert_eq(-1.0_f32);
-            assert_assign("X").literal(".5").assert_eq(0.5_f32);
-            assert_assign("X").literal("-.5").assert_eq(-0.5_f32);
-            assert_assign("X").literal("1").assert_eq(1.0_f32);
-            assert_assign("X").literal("3.14#").assert_eq(3.14_f32);
+            assert_assign("X")
+                .literal("1.0")
+                .qualified_variable("X!")
+                .assert_eq(1.0_f32);
+            assert_assign("X")
+                .literal("-1.0")
+                .qualified_variable("X!")
+                .assert_eq(-1.0_f32);
+            assert_assign("X")
+                .literal(".5")
+                .qualified_variable("X!")
+                .assert_eq(0.5_f32);
+            assert_assign("X")
+                .literal("-.5")
+                .qualified_variable("X!")
+                .assert_eq(-0.5_f32);
+            assert_assign("X")
+                .literal("1")
+                .qualified_variable("X!")
+                .assert_eq(1.0_f32);
+            assert_assign("X")
+                .literal("3.14#")
+                .qualified_variable("X!")
+                .assert_eq(3.14_f32);
             assert_assign("X").literal("\"hello\"").assert_err();
         }
 
@@ -22,6 +40,7 @@ mod tests {
         fn test_assign_plus_expression_to_unqualified_float() {
             assert_assign("X")
                 .literal(".5 + .5")
+                .qualified_variable("X!")
                 .assert_eq(Variant::from(1.0_f32));
         }
 
@@ -86,7 +105,6 @@ A$ = \"Hello\"
 A% = 1
 A& = 100";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 0.1_f32);
             assert_has_variable!(interpreter, "A!", 0.1_f32);
             assert_has_variable!(interpreter, "A#", 3.14);
             assert_has_variable!(interpreter, "A$", "Hello");
@@ -100,8 +118,8 @@ A& = 100";
 B = -A";
 
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", -42.0_f32);
-            assert_has_variable!(interpreter, "B", 42.0_f32);
+            assert_has_variable!(interpreter, "A!", -42.0_f32);
+            assert_has_variable!(interpreter, "B!", 42.0_f32);
         }
 
         #[test]
@@ -111,10 +129,10 @@ B = -A";
             b = 12
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 42.0_f32);
-            assert_has_variable!(interpreter, "a", 42.0_f32);
-            assert_has_variable!(interpreter, "B", 12.0_f32);
-            assert_has_variable!(interpreter, "b", 12.0_f32);
+            assert_has_variable!(interpreter, "A!", 42.0_f32);
+            assert_has_variable!(interpreter, "a!", 42.0_f32);
+            assert_has_variable!(interpreter, "B!", 12.0_f32);
+            assert_has_variable!(interpreter, "b!", 12.0_f32);
         }
 
         #[test]
@@ -139,10 +157,10 @@ B = -A";
             B = b + 1
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 43_f32);
-            assert_has_variable!(interpreter, "a", 43_f32);
-            assert_has_variable!(interpreter, "B", 13_f32);
-            assert_has_variable!(interpreter, "b", 13_f32);
+            assert_has_variable!(interpreter, "A!", 43_f32);
+            assert_has_variable!(interpreter, "a!", 43_f32);
+            assert_has_variable!(interpreter, "B!", 13_f32);
+            assert_has_variable!(interpreter, "b!", 13_f32);
         }
 
         #[test]
@@ -168,7 +186,6 @@ B = -A";
             A! = 3.14
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 6.28_f64);
             assert_has_variable!(interpreter, "A!", 3.14_f32);
             assert_has_variable!(interpreter, "A#", 6.28_f64);
         }
@@ -181,7 +198,6 @@ B = -A";
             A! = 3.14
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 42);
             assert_has_variable!(interpreter, "A!", 3.14_f32);
             assert_has_variable!(interpreter, "A%", 42);
         }
@@ -194,7 +210,6 @@ B = -A";
             A! = 3.14
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 42_i64);
             assert_has_variable!(interpreter, "A!", 3.14_f32);
             assert_has_variable!(interpreter, "A&", 42_i64);
         }
@@ -207,7 +222,6 @@ B = -A";
             A! = 3.14
             ";
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", 3.14_f32);
             assert_has_variable!(interpreter, "A!", 3.14_f32);
         }
 
@@ -219,7 +233,6 @@ B = -A";
             A! = 3.14
             "#;
             let interpreter = interpret(input);
-            assert_has_variable!(interpreter, "A", "hello");
             assert_has_variable!(interpreter, "A!", 3.14_f32);
             assert_has_variable!(interpreter, "A$", "hello");
         }

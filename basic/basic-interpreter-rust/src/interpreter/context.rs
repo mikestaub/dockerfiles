@@ -1,11 +1,9 @@
 use super::{InterpreterError, Result};
 use crate::casting::cast;
 use crate::common::{CaseInsensitiveString, HasLocation, Location};
-use crate::parser::*;
+use crate::linter::*;
 use crate::variant::Variant;
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Argument {
@@ -72,36 +70,35 @@ pub type Args = (ArgumentMap, UnnamedArgs);
 pub type FunctionResult = Option<Variant>;
 
 #[derive(Debug)]
-pub struct RootContext<T: TypeResolver> {
-    resolver: Rc<RefCell<T>>,
+pub struct RootContext {
     variables: VariableMap,
     constants: ConstantMap,
     function_result: Variant,
 }
 
 #[derive(Debug)]
-pub struct ArgsContext<T: TypeResolver> {
-    parent: Box<Context<T>>,
+pub struct ArgsContext {
+    parent: Box<Context>,
     args: Args,
 }
 
 #[derive(Debug)]
-pub struct SubContext<T: TypeResolver> {
-    parent: Box<Context<T>>,
+pub struct SubContext {
+    parent: Box<Context>,
     variables: ArgumentMap,
     constants: ConstantMap,
     unnamed_args: UnnamedArgs,
 }
 
 #[derive(Debug)]
-pub enum Context<T: TypeResolver> {
-    Root(RootContext<T>),
-    Sub(SubContext<T>),
-    Args(ArgsContext<T>),
+pub enum Context {
+    Root(RootContext),
+    Sub(SubContext),
+    Args(ArgsContext),
 }
 
 trait CreateParameter {
-    fn create_parameter(&mut self, name_node: &NameNode) -> Result<Argument>;
+    fn create_parameter(&mut self, name_node: &QNameNode) -> Result<Argument>;
 }
 
 trait SetLValueQ {
@@ -118,7 +115,7 @@ trait GetConstant {
     fn get_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<&Variant>>;
 }
@@ -127,12 +124,12 @@ impl GetConstant for ConstantMap {
     fn get_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<&Variant>> {
         match self.get(bare_name) {
             Some(v) => {
-                if opt_qualifier.is_none() || opt_qualifier.unwrap() == v.qualifier() {
+                if qualifier == v.qualifier() {
                     Ok(Some(v))
                 } else {
                     // trying to reference a constant with wrong type
@@ -144,39 +141,39 @@ impl GetConstant for ConstantMap {
     }
 }
 
-impl<T: TypeResolver> GetConstant for RootContext<T> {
+impl GetConstant for RootContext {
     fn get_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<&Variant>> {
-        self.constants.get_constant(bare_name, opt_qualifier, pos)
+        self.constants.get_constant(bare_name, qualifier, pos)
     }
 }
 
-impl<T: TypeResolver> GetConstant for SubContext<T> {
+impl GetConstant for SubContext {
     fn get_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<&Variant>> {
-        self.constants.get_constant(bare_name, opt_qualifier, pos)
+        self.constants.get_constant(bare_name, qualifier, pos)
     }
 }
 
-impl<T: TypeResolver> GetConstant for Context<T> {
+impl GetConstant for Context {
     fn get_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<&Variant>> {
         match self {
-            Self::Root(r) => r.get_constant(bare_name, opt_qualifier, pos),
-            Self::Args(a) => a.parent.get_constant(bare_name, opt_qualifier, pos),
-            Self::Sub(s) => s.get_constant(bare_name, opt_qualifier, pos),
+            Self::Root(r) => r.get_constant(bare_name, qualifier, pos),
+            Self::Args(a) => a.parent.get_constant(bare_name, qualifier, pos),
+            Self::Sub(s) => s.get_constant(bare_name, qualifier, pos),
         }
     }
 }
@@ -185,65 +182,61 @@ trait GetParentConstant {
     fn get_parent_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>>;
 }
 
-impl<T: TypeResolver> GetParentConstant for RootContext<T> {
+impl GetParentConstant for RootContext {
     fn get_parent_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
         Ok(None)
     }
 }
 
-impl<T: TypeResolver> GetParentConstant for ArgsContext<T> {
+impl GetParentConstant for ArgsContext {
     fn get_parent_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
-        match self.parent.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.parent.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Some(v.clone())),
-            None => self
-                .parent
-                .get_parent_constant(bare_name, opt_qualifier, pos),
+            None => self.parent.get_parent_constant(bare_name, qualifier, pos),
         }
     }
 }
 
-impl<T: TypeResolver> GetParentConstant for SubContext<T> {
+impl GetParentConstant for SubContext {
     fn get_parent_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
-        match self.parent.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.parent.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Some(v.clone())),
-            None => self
-                .parent
-                .get_parent_constant(bare_name, opt_qualifier, pos),
+            None => self.parent.get_parent_constant(bare_name, qualifier, pos),
         }
     }
 }
 
-impl<T: TypeResolver> GetParentConstant for Context<T> {
+impl GetParentConstant for Context {
     fn get_parent_constant(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
         match self {
-            Self::Root(r) => r.get_parent_constant(bare_name, opt_qualifier, pos),
-            Self::Args(a) => a.get_parent_constant(bare_name, opt_qualifier, pos),
-            Self::Sub(s) => s.get_parent_constant(bare_name, opt_qualifier, pos),
+            Self::Root(r) => r.get_parent_constant(bare_name, qualifier, pos),
+            Self::Args(a) => a.get_parent_constant(bare_name, qualifier, pos),
+            Self::Sub(s) => s.get_parent_constant(bare_name, qualifier, pos),
         }
     }
 }
@@ -252,26 +245,22 @@ trait GetRValueQualified {
     fn get_r_value_q(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>>;
 }
 
-impl<T: TypeResolver> GetRValueQualified for RootContext<T> {
+impl GetRValueQualified for RootContext {
     fn get_r_value_q(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
         // local constant?
-        match self.constants.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.constants.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Some(v.clone())),
             None => {
-                let qualifier = match opt_qualifier {
-                    Some(q) => q,
-                    None => self.resolver.resolve(bare_name),
-                };
                 // variable?
                 match self.get_variable(bare_name, qualifier) {
                     Some(v) => Ok(Some(v.clone())),
@@ -282,39 +271,34 @@ impl<T: TypeResolver> GetRValueQualified for RootContext<T> {
     }
 }
 
-impl<T: TypeResolver> GetRValueQualified for ArgsContext<T> {
+impl GetRValueQualified for ArgsContext {
     fn get_r_value_q(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
-        self.parent.get_r_value_q(bare_name, opt_qualifier, pos)
+        self.parent.get_r_value_q(bare_name, qualifier, pos)
     }
 }
 
-impl<T: TypeResolver> GetRValueQualified for SubContext<T> {
+impl GetRValueQualified for SubContext {
     fn get_r_value_q(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
         // local constant?
-        match self.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Some(v.clone())),
             None => {
-                // argument?
-                let qualifier = match opt_qualifier {
-                    Some(q) => q,
-                    None => self.resolve(bare_name),
-                };
                 // variable?
                 match self.get_variable(bare_name, qualifier) {
                     Some(v) => self.evaluate_argument(v, pos),
                     None => {
                         // parent constant?
-                        self.get_parent_constant(bare_name, opt_qualifier, pos)
+                        self.get_parent_constant(bare_name, qualifier, pos)
                     }
                 }
             }
@@ -322,17 +306,17 @@ impl<T: TypeResolver> GetRValueQualified for SubContext<T> {
     }
 }
 
-impl<T: TypeResolver> GetRValueQualified for Context<T> {
+impl GetRValueQualified for Context {
     fn get_r_value_q(
         &self,
         bare_name: &CaseInsensitiveString,
-        opt_qualifier: Option<TypeQualifier>,
+        qualifier: TypeQualifier,
         pos: Location,
     ) -> Result<Option<Variant>> {
         match self {
-            Self::Root(r) => r.get_r_value_q(bare_name, opt_qualifier, pos),
-            Self::Args(a) => a.get_r_value_q(bare_name, opt_qualifier, pos),
-            Self::Sub(s) => s.get_r_value_q(bare_name, opt_qualifier, pos),
+            Self::Root(r) => r.get_r_value_q(bare_name, qualifier, pos),
+            Self::Args(a) => a.get_r_value_q(bare_name, qualifier, pos),
+            Self::Sub(s) => s.get_r_value_q(bare_name, qualifier, pos),
         }
     }
 }
@@ -341,10 +325,9 @@ impl<T: TypeResolver> GetRValueQualified for Context<T> {
 // RootContext
 //
 
-impl<T: TypeResolver> RootContext<T> {
-    pub fn new(resolver: Rc<RefCell<T>>) -> Self {
+impl RootContext {
+    pub fn new() -> Self {
         Self {
-            resolver,
             variables: HashMap::new(),
             constants: HashMap::new(),
             function_result: Variant::VInteger(0),
@@ -381,11 +364,11 @@ impl<T: TypeResolver> RootContext<T> {
     // RValue
     //
 
-    pub fn get_r_value(&self, name_node: &NameNode) -> Result<Option<Variant>> {
+    pub fn get_r_value(&self, name_node: &QNameNode) -> Result<Option<Variant>> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
-        self.get_r_value_q(bare_name, opt_qualifier, pos)
+        self.get_r_value_q(bare_name, qualifier, pos)
     }
 
     fn get_variable(
@@ -403,22 +386,12 @@ impl<T: TypeResolver> RootContext<T> {
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name_node: &NameNode, value: Variant) -> Result<()> {
+    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
         let pos = name_node.location();
         // subtle difference, bare name constants get their type from the value
-        let bare_name: &CaseInsensitiveString;
-        let casted: Variant;
-        match name_node.as_ref() {
-            Name::Bare(b) => {
-                bare_name = b;
-                casted = value;
-            }
-            Name::Qualified(q) => {
-                bare_name = q.bare_name();
-                let qualifier = q.qualifier();
-                casted = do_cast(value, qualifier, pos)?;
-            }
-        }
+        let bare_name: &CaseInsensitiveString = name_node.bare_name();
+        let qualifier = name_node.qualifier();
+        let casted: Variant = do_cast(value, qualifier, pos)?;
         // if a local constant or parameter or variable already exists throw an error
         if self.constant_exists_no_recursion(name_node) || self.variables.contains_key(bare_name) {
             return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
@@ -434,15 +407,15 @@ impl<T: TypeResolver> RootContext<T> {
 
     // TODO why is this not used?
 
-    pub fn get_const_r_value(&self, name_node: &NameNode) -> Result<Variant> {
+    pub fn get_const_r_value(&self, name_node: &QNameNode) -> Result<Variant> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
         if self.variables.contains_key(bare_name) {
             return Err(InterpreterError::new_with_pos("Invalid constant", pos));
         }
 
-        match self.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(v.clone()),
             None => Err(InterpreterError::new_with_pos(
                 "Invalid constant (undef variable)",
@@ -456,25 +429,15 @@ impl<T: TypeResolver> RootContext<T> {
 // RootContext traits
 //
 
-impl<T: TypeResolver> TypeResolver for RootContext<T> {
-    fn resolve<U: NameTrait>(&self, n: &U) -> TypeQualifier {
-        self.resolver.resolve(n)
-    }
-}
-
-impl<T: TypeResolver> CreateParameter for RootContext<T> {
-    fn create_parameter(&mut self, name_node: &NameNode) -> Result<Argument> {
+impl CreateParameter for RootContext {
+    fn create_parameter(&mut self, name_node: &QNameNode) -> Result<Argument> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
 
-        match self.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Argument::ByVal(v.clone())),
             None => {
-                let qualifier = match opt_qualifier {
-                    Some(q) => q,
-                    None => self.resolve(bare_name),
-                };
                 match self.get_variable(bare_name, qualifier) {
                     // ref pointing to var
                     Some(_) => Ok(Argument::ByRef(QualifiedName::new(
@@ -500,7 +463,7 @@ impl<T: TypeResolver> CreateParameter for RootContext<T> {
     }
 }
 
-impl<T: TypeResolver> SetLValueQ for RootContext<T> {
+impl SetLValueQ for RootContext {
     fn set_l_value_q(
         &mut self,
         bare_name: &CaseInsensitiveString,
@@ -523,8 +486,8 @@ impl<T: TypeResolver> SetLValueQ for RootContext<T> {
 // ArgsContext
 //
 
-impl<T: TypeResolver> ArgsContext<T> {
-    pub fn push_back_unnamed_ref_parameter(&mut self, name_node: &NameNode) -> Result<()> {
+impl ArgsContext {
+    pub fn push_back_unnamed_ref_parameter(&mut self, name_node: &QNameNode) -> Result<()> {
         let arg = self.create_parameter(name_node)?;
         self.args.1.push_back(arg);
         Ok(())
@@ -537,7 +500,7 @@ impl<T: TypeResolver> ArgsContext<T> {
     pub fn set_named_ref_parameter(
         &mut self,
         param_name: &QualifiedName,
-        name_node: &NameNode,
+        name_node: &QNameNode,
     ) -> Result<()> {
         let arg = self.create_parameter(name_node)?;
         self.insert_next_argument(param_name, arg);
@@ -568,19 +531,13 @@ impl<T: TypeResolver> ArgsContext<T> {
 // ArgsContext traits
 //
 
-impl<T: TypeResolver> TypeResolver for ArgsContext<T> {
-    fn resolve<U: NameTrait>(&self, n: &U) -> TypeQualifier {
-        self.parent.resolve(n)
-    }
-}
-
-impl<T: TypeResolver> CreateParameter for ArgsContext<T> {
-    fn create_parameter(&mut self, name_node: &NameNode) -> Result<Argument> {
+impl CreateParameter for ArgsContext {
+    fn create_parameter(&mut self, name_node: &QNameNode) -> Result<Argument> {
         self.parent.create_parameter(name_node)
     }
 }
 
-impl<T: TypeResolver> SetLValueQ for ArgsContext<T> {
+impl SetLValueQ for ArgsContext {
     fn set_l_value_q(
         &mut self,
         bare_name: &CaseInsensitiveString,
@@ -596,7 +553,7 @@ impl<T: TypeResolver> SetLValueQ for ArgsContext<T> {
 // SubContext
 //
 
-impl<T: TypeResolver> SubContext<T> {
+impl SubContext {
     //
     // LValue (e.g. X = ?, FOR X = ?)
     //
@@ -648,20 +605,17 @@ impl<T: TypeResolver> SubContext<T> {
     // RValue
     //
 
-    pub fn get_r_value(&self, name_node: &NameNode) -> Result<Option<Variant>> {
+    pub fn get_r_value(&self, name_node: &QNameNode) -> Result<Option<Variant>> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
-        self.get_r_value_q(bare_name, opt_qualifier, pos)
+        self.get_r_value_q(bare_name, qualifier, pos)
     }
 
     fn evaluate_argument(&self, arg: &Argument, pos: Location) -> Result<Option<Variant>> {
         match arg {
             Argument::ByVal(v) => Ok(Some(v.clone())),
-            Argument::ByRef(n) => {
-                self.parent
-                    .get_r_value_q(n.bare_name(), Some(n.qualifier()), pos)
-            }
+            Argument::ByRef(n) => self.parent.get_r_value_q(n.bare_name(), n.qualifier(), pos),
         }
     }
 
@@ -680,22 +634,12 @@ impl<T: TypeResolver> SubContext<T> {
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name_node: &NameNode, value: Variant) -> Result<()> {
+    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
         let pos = name_node.location();
         // subtle difference, bare name constants get their type from the value
-        let bare_name: &CaseInsensitiveString;
-        let casted: Variant;
-        match name_node.as_ref() {
-            Name::Bare(b) => {
-                bare_name = b;
-                casted = value;
-            }
-            Name::Qualified(q) => {
-                bare_name = q.bare_name();
-                let qualifier = q.qualifier();
-                casted = do_cast(value, qualifier, pos)?;
-            }
-        }
+        let bare_name: &CaseInsensitiveString = name_node.bare_name();
+        let qualifier = name_node.qualifier();
+        let casted: Variant = do_cast(value, qualifier, pos)?;
         // if a local constant or parameter or variable already exists throw an error
         if self.constant_exists_no_recursion(name_node) || self.variables.contains_key(bare_name) {
             return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
@@ -711,17 +655,17 @@ impl<T: TypeResolver> SubContext<T> {
 
     // TODO why is this not used?
 
-    pub fn get_const_r_value(&self, name_node: &NameNode) -> Result<Variant> {
+    pub fn get_const_r_value(&self, name_node: &QNameNode) -> Result<Variant> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
         if self.variables.contains_key(bare_name) {
             return Err(InterpreterError::new_with_pos("Invalid constant", pos));
         }
 
-        match self.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(v.clone()),
-            None => match self.get_parent_constant(bare_name, opt_qualifier, pos)? {
+            None => match self.get_parent_constant(bare_name, qualifier, pos)? {
                 Some(v) => Ok(v),
                 None => Err(InterpreterError::new_with_pos(
                     "Invalid constant (undef variable)",
@@ -781,26 +725,15 @@ impl<T: TypeResolver> SubContext<T> {
 // SubContext traits
 //
 
-impl<T: TypeResolver> TypeResolver for SubContext<T> {
-    fn resolve<U: NameTrait>(&self, n: &U) -> TypeQualifier {
-        self.parent.resolve(n)
-    }
-}
-
-impl<T: TypeResolver> CreateParameter for SubContext<T> {
-    fn create_parameter(&mut self, name_node: &NameNode) -> Result<Argument> {
+impl CreateParameter for SubContext {
+    fn create_parameter(&mut self, name_node: &QNameNode) -> Result<Argument> {
         let bare_name = name_node.bare_name();
-        let opt_qualifier = name_node.opt_qualifier();
+        let qualifier = name_node.qualifier();
         let pos = name_node.location();
 
-        match self.get_constant(bare_name, opt_qualifier, pos)? {
+        match self.get_constant(bare_name, qualifier, pos)? {
             Some(v) => Ok(Argument::ByVal(v.clone())),
             None => {
-                let qualifier = match opt_qualifier {
-                    Some(q) => q,
-                    None => self.resolve(bare_name),
-                };
-
                 // variable?
                 match self.get_variable(bare_name, qualifier) {
                     // ref pointing to var
@@ -810,7 +743,7 @@ impl<T: TypeResolver> CreateParameter for SubContext<T> {
                     ))),
                     None => {
                         // parent constant?
-                        match self.get_parent_constant(bare_name, opt_qualifier, pos)? {
+                        match self.get_parent_constant(bare_name, qualifier, pos)? {
                             Some(v) => Ok(Argument::ByVal(v.clone())),
                             None => {
                                 // create the variable in this scope
@@ -833,7 +766,7 @@ impl<T: TypeResolver> CreateParameter for SubContext<T> {
     }
 }
 
-impl<T: TypeResolver> SetLValueQ for SubContext<T> {
+impl SetLValueQ for SubContext {
     fn set_l_value_q(
         &mut self,
         bare_name: &CaseInsensitiveString,
@@ -874,9 +807,9 @@ impl<T: TypeResolver> SetLValueQ for SubContext<T> {
 // Context
 //
 
-impl<T: TypeResolver> Context<T> {
-    pub fn new(resolver: Rc<RefCell<T>>) -> Self {
-        Self::Root(RootContext::new(resolver))
+impl Context {
+    pub fn new() -> Self {
+        Self::Root(RootContext::new())
     }
 
     pub fn push_args_context(self) -> Self {
@@ -908,27 +841,24 @@ impl<T: TypeResolver> Context<T> {
 
     // adapter methods
 
-    pub fn get_r_value<U: NameTrait + HasLocation>(
-        &self,
-        name_node: &U,
-    ) -> Result<Option<Variant>> {
+    pub fn get_r_value(&self, name_node: &QNameNode) -> Result<Option<Variant>> {
         self.get_r_value_q(
             name_node.bare_name(),
-            name_node.opt_qualifier(),
+            name_node.qualifier(),
             name_node.location(),
         )
     }
 
-    pub fn set_l_value<U: NameTrait>(
+    pub fn set_l_value(
         &mut self,
-        name: &U,
+        name: &QualifiedName,
         pos: Location,
         value: Variant,
     ) -> Result<()> {
-        self.set_l_value_q(name.bare_name(), self.resolve(name), pos, value)
+        self.set_l_value_q(name.bare_name(), name.qualifier(), pos, value)
     }
 
-    pub fn set_const_l_value(&mut self, name_node: &NameNode, value: Variant) -> Result<()> {
+    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
         match self {
             Self::Root(r) => r.set_const_l_value(name_node, value),
             Self::Sub(s) => s.set_const_l_value(name_node, value),
@@ -936,14 +866,14 @@ impl<T: TypeResolver> Context<T> {
         }
     }
 
-    pub fn demand_args(&mut self) -> &mut ArgsContext<T> {
+    pub fn demand_args(&mut self) -> &mut ArgsContext {
         match self {
             Self::Args(a) => a,
             _ => panic!("Not in an args context"),
         }
     }
 
-    pub fn demand_sub(&mut self) -> &mut SubContext<T> {
+    pub fn demand_sub(&mut self) -> &mut SubContext {
         match self {
             Self::Sub(s) => s,
             _ => panic!("Not in a subprogram context"),
@@ -971,18 +901,8 @@ impl<T: TypeResolver> Context<T> {
 // Context traits
 //
 
-impl<T: TypeResolver> TypeResolver for Context<T> {
-    fn resolve<U: NameTrait>(&self, n: &U) -> TypeQualifier {
-        match self {
-            Self::Root(r) => r.resolve(n),
-            Self::Sub(s) => s.resolve(n),
-            Self::Args(a) => a.resolve(n),
-        }
-    }
-}
-
-impl<T: TypeResolver> CreateParameter for Context<T> {
-    fn create_parameter(&mut self, name_node: &NameNode) -> Result<Argument> {
+impl CreateParameter for Context {
+    fn create_parameter(&mut self, name_node: &QNameNode) -> Result<Argument> {
         match self {
             Self::Root(r) => r.create_parameter(name_node),
             Self::Sub(s) => s.create_parameter(name_node),
@@ -991,7 +911,7 @@ impl<T: TypeResolver> CreateParameter for Context<T> {
     }
 }
 
-impl<T: TypeResolver> SetLValueQ for Context<T> {
+impl SetLValueQ for Context {
     fn set_l_value_q(
         &mut self,
         bare_name: &CaseInsensitiveString,

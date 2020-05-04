@@ -1,6 +1,5 @@
 use super::{Interpreter, Stdlib};
 use crate::interpreter::context::Context;
-use crate::parser::type_resolver_impl::TypeResolverImpl;
 
 /// Represents the owner of a variable context.
 pub trait ContextOwner {
@@ -12,8 +11,8 @@ pub trait ContextOwner {
     /// Pops a context.
     fn pop(&mut self);
 
-    fn context_ref(&self) -> &Context<TypeResolverImpl>;
-    fn context_mut(&mut self) -> &mut Context<TypeResolverImpl>;
+    fn context_ref(&self) -> &Context;
+    fn context_mut(&mut self) -> &mut Context;
 }
 
 impl<S: Stdlib> ContextOwner for Interpreter<S> {
@@ -29,14 +28,14 @@ impl<S: Stdlib> ContextOwner for Interpreter<S> {
         self.context = self.context.take().map(|x| x.pop());
     }
 
-    fn context_ref(&self) -> &Context<TypeResolverImpl> {
+    fn context_ref(&self) -> &Context {
         match &self.context {
             Some(x) => x,
             None => panic!("stack underflow"),
         }
     }
 
-    fn context_mut(&mut self) -> &mut Context<TypeResolverImpl> {
+    fn context_mut(&mut self) -> &mut Context {
         match &mut self.context {
             Some(x) => x,
             None => panic!("stack underflow"),

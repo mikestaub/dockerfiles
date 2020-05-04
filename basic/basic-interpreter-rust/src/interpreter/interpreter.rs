@@ -4,14 +4,12 @@ use crate::instruction_generator::{Instruction, InstructionNode};
 use crate::interpreter::context::Context;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{InterpreterError, Result, Stdlib};
-use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::{DefType, Name, NameNode, NameTrait, TypeQualifier, TypeResolver};
+
 use crate::variant::Variant;
-use std::cell::RefCell;
+
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use std::rc::Rc;
 
 // TODO: 1. instructionContext -> emitter
 //       2. fix bug
@@ -20,56 +18,121 @@ use std::rc::Rc;
 //       5. fix remaining todos
 //       6. rename suprogram_resolver to linter
 
-impl<T: TypeResolver> TypeResolver for Rc<RefCell<T>> {
-    fn resolve<U: NameTrait>(&self, name: &U) -> TypeQualifier {
-        self.as_ref().borrow().resolve(name)
-    }
+#[derive(Debug)]
+pub struct Registers {
+    a: Variant,
+    b: Variant,
+    c: Variant,
+    d: Variant,
 }
 
-#[derive(Debug)]
-pub struct Registers(Variant, Variant);
+impl Registers {
+    pub fn new() -> Self {
+        Self {
+            a: Variant::VInteger(0),
+            b: Variant::VInteger(0),
+            c: Variant::VInteger(0),
+            d: Variant::VInteger(0),
+        }
+    }
+
+    pub fn get_a(&self) -> Variant {
+        self.a.clone()
+    }
+
+    pub fn get_b(&self) -> Variant {
+        self.b.clone()
+    }
+
+    pub fn get_c(&self) -> Variant {
+        self.c.clone()
+    }
+
+    pub fn get_d(&self) -> Variant {
+        self.d.clone()
+    }
+
+    pub fn set_a(&mut self, v: Variant) {
+        self.a = v;
+    }
+
+    pub fn set_b(&mut self, v: Variant) {
+        self.b = v;
+    }
+
+    pub fn set_c(&mut self, v: Variant) {
+        self.c = v;
+    }
+
+    pub fn set_d(&mut self, v: Variant) {
+        self.d = v;
+    }
+
+    pub fn copy_a_to_b(&mut self) {
+        self.b = self.a.clone();
+    }
+
+    pub fn copy_a_to_c(&mut self) {
+        self.c = self.a.clone();
+    }
+
+    pub fn copy_a_to_d(&mut self) {
+        self.d = self.a.clone();
+    }
+
+    pub fn copy_c_to_b(&mut self) {
+        self.b = self.c.clone();
+    }
+
+    pub fn copy_d_to_a(&mut self) {
+        self.a = self.d.clone();
+    }
+
+    pub fn copy_d_to_b(&mut self) {
+        self.b = self.d.clone();
+    }
+}
 
 pub type RegisterStack = VecDeque<Registers>;
 
 #[derive(Debug)]
 pub struct Interpreter<S: Stdlib> {
     pub stdlib: S,
-    pub context: Option<Context<TypeResolverImpl>>,
-    pub type_resolver: Rc<RefCell<TypeResolverImpl>>,
+    pub context: Option<Context>,
     register_stack: RegisterStack,
     return_stack: Vec<usize>,
 }
 
 impl<TStdlib: Stdlib> Interpreter<TStdlib> {
     pub fn new(stdlib: TStdlib) -> Self {
-        let tr = Rc::new(RefCell::new(TypeResolverImpl::new()));
         let mut result = Interpreter {
             stdlib,
-            context: Some(Context::new(Rc::clone(&tr))),
-            type_resolver: tr,
+            context: Some(Context::new()),
             return_stack: vec![],
             register_stack: VecDeque::new(),
         };
+        result.register_stack.push_back(Registers::new());
         result
-            .register_stack
-            .push_back(Registers(Variant::VInteger(0), Variant::VInteger(0)));
-        result
+    }
+
+    fn registers_ref(&self) -> &Registers {
+        self.register_stack.back().unwrap()
+    }
+
+    fn registers_mut(&mut self) -> &mut Registers {
+        self.register_stack.back_mut().unwrap()
     }
 
     fn get_a(&self) -> Variant {
-        self.register_stack.back().unwrap().0.clone()
+        self.registers_ref().get_a()
     }
 
-    fn get_b(&self) -> &Variant {
-        &self.register_stack.back().unwrap().1
+    fn get_b(&self) -> Variant {
+        self.registers_ref().get_b()
     }
 
     fn set_a(&mut self, v: Variant) {
-        self.register_stack.back_mut().unwrap().0 = v;
-    }
-
-    fn set_b(&mut self, v: Variant) {
-        self.register_stack.back_mut().unwrap().1 = v;
+        self.registers_mut().set_a(v);
     }
 
     fn interpret_one(
@@ -85,12 +148,11 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 *error_handler = Some(*idx);
             }
             Instruction::PushRegisters => {
-                self.register_stack
-                    .push_back(Registers(Variant::VInteger(0), Variant::VInteger(0)));
+                self.register_stack.push_back(Registers::new());
             }
             Instruction::PopRegisters => {
                 let old_registers = self.register_stack.pop_back();
-                self.set_a(old_registers.unwrap().0);
+                self.set_a(old_registers.unwrap().get_a());
             }
             Instruction::Load(v) => {
                 self.set_a(v.clone());
@@ -102,17 +164,27 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::StoreConst(n) => {
                 let v = self.get_a();
                 self.context_mut()
-                    .set_const_l_value(&Name::Bare(n.clone()).at(pos), v)?;
-            }
-            Instruction::Cast(q) => {
-                let v = cast(self.get_a(), *q)
-                    .map_err(|msg| InterpreterError::new_with_pos(msg, pos))?;
-                self.set_a(v);
+                    .set_const_l_value(&n.clone().at(pos), v)?;
             }
             Instruction::CopyAToB => {
-                let v = self.get_a();
-                self.set_b(v);
+                self.registers_mut().copy_a_to_b();
             }
+            Instruction::CopyAToC => {
+                self.registers_mut().copy_a_to_c();
+            }
+            Instruction::CopyAToD => {
+                self.registers_mut().copy_a_to_d();
+            }
+            Instruction::CopyCToB => {
+                self.registers_mut().copy_c_to_b();
+            }
+            Instruction::CopyDToA => {
+                self.registers_mut().copy_d_to_a();
+            }
+            Instruction::CopyDToB => {
+                self.registers_mut().copy_d_to_b();
+            }
+
             Instruction::Plus => {
                 let a = self.get_a();
                 let b = self.get_b();
@@ -144,16 +216,11 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 self.set_a(c);
             }
             Instruction::CopyVarToA(n) => {
-                let name_node: NameNode = n.clone().at(pos);
+                let name_node = n.clone().at(pos);
                 match self.context_ref().get_r_value(&name_node)? {
                     Some(v) => self.set_a(v),
                     None => panic!("Variable {} undefined at {:?}", n, pos),
                 }
-            }
-            Instruction::CopyVarToB(n) => {
-                let name_node: NameNode = n.clone().at(pos);
-                let v = self.context_ref().get_r_value(&name_node)?.unwrap().clone();
-                self.set_b(v);
             }
             Instruction::LessThan => {
                 let a = self.get_a();
@@ -245,9 +312,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 panic!("Unresolved label {:?} at {:?}", instruction, pos)
             }
             Instruction::Label(_) => (), // no-op
-            Instruction::DefType(def_type) => {
-                self.handle_def_type(def_type);
-            }
             Instruction::Halt => {
                 *exit = true;
             }
@@ -301,10 +365,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
     fn throw(&mut self, msg: &String, pos: Location) -> Result<()> {
         Err(InterpreterError::new_with_pos(msg, pos))
     }
-
-    fn handle_def_type(&mut self, x: &DefType) {
-        self.type_resolver.borrow_mut().set(x);
-    }
 }
 
 #[cfg(test)]
@@ -312,7 +372,7 @@ mod tests {
     use super::super::test_utils::*;
 
     #[test]
-    fn test_interpret_print_hello_world() {
+    fn test_interpret_print_hello_world_one_arg() {
         let input = "PRINT \"Hello, world!\"";
         assert_eq!(interpret(input).stdlib.output, vec!["Hello, world!"]);
     }

@@ -1,6 +1,6 @@
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::parser::{Statement, StatementNode, StatementNodes};
+use crate::linter::{Statement, StatementNode, StatementNodes};
 
 impl InstructionGenerator {
     pub fn generate_block_instructions(&mut self, block: StatementNodes) -> Result<()> {
@@ -36,7 +36,7 @@ impl InstructionGenerator {
                 self.push(Instruction::UnresolvedJump(name.clone()), pos);
                 Ok(())
             }
-            Statement::InternalSetReturnValue(e) => {
+            Statement::SetReturnValue(e) => {
                 self.generate_expression_instructions(e)?;
                 self.push(Instruction::StoreAToResult, pos);
                 Ok(())

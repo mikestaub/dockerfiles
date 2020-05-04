@@ -8,7 +8,7 @@ mod tests {
 
     #[test]
     fn test_literals() {
-        assert_has_variable!(interpret("X = 3.14"), "X", 3.14_f32);
+        assert_has_variable!(interpret("X = 3.14"), "X!", 3.14_f32);
         assert_has_variable!(interpret("X# = 3.14"), "X#", 3.14);
         assert_has_variable!(interpret("X$ = \"hello\""), "X$", "hello");
         assert_has_variable!(interpret("X% = 42"), "X%", 42);
@@ -20,9 +20,9 @@ mod tests {
 
         #[test]
         fn test_left_float() {
-            assert_has_variable!(interpret("X = 1.1 + 2.1"), "X", 3.2_f32);
-            assert_has_variable!(interpret("X = 1.1 + 2.1#"), "X", 3.2_f32);
-            assert_has_variable!(interpret("X = 1.1 + 2"), "X", 3.1_f32);
+            assert_has_variable!(interpret("X = 1.1 + 2.1"), "X!", 3.2_f32);
+            assert_has_variable!(interpret("X = 1.1 + 2.1#"), "X!", 3.2_f32);
+            assert_has_variable!(interpret("X = 1.1 + 2"), "X!", 3.1_f32);
             assert_eq!(
                 interpret_err("X = 1.1 + \"hello\""),
                 InterpreterError::new_with_pos("Type mismatch", Location::new(1, 9))
@@ -117,9 +117,9 @@ mod tests {
 
         #[test]
         fn test_left_float() {
-            assert_has_variable!(interpret("X = 5.4 - 2.1"), "X", 3.3_f32);
-            assert_has_variable!(interpret("X = 5.4 - 2.1#"), "X", 3.3_f32);
-            assert_has_variable!(interpret("X = 5.1 - 2"), "X", 3.1_f32);
+            assert_has_variable!(interpret("X = 5.4 - 2.1"), "X!", 3.3_f32);
+            assert_has_variable!(interpret("X = 5.4 - 2.1#"), "X!", 3.3_f32);
+            assert_has_variable!(interpret("X = 5.1 - 2"), "X!", 3.1_f32);
             assert_eq!(
                 interpret_err("X = 1.1 - \"hello\""),
                 InterpreterError::new_with_pos("Type mismatch", Location::new(1, 9))
@@ -187,9 +187,9 @@ mod tests {
 
         #[test]
         fn test_unary_minus_float() {
-            assert_has_variable!(interpret("X = -1.1"), "X", -1.1_f32);
-            assert_has_variable!(interpret("X = -1.1#"), "X", -1.1_f32);
-            assert_has_variable!(interpret("X = -1"), "X", -1.0_f32);
+            assert_has_variable!(interpret("X = -1.1"), "X!", -1.1_f32);
+            assert_has_variable!(interpret("X = -1.1#"), "X!", -1.1_f32);
+            assert_has_variable!(interpret("X = -1"), "X!", -1.0_f32);
             assert_eq!(
                 interpret_err("X = -\"hello\""),
                 InterpreterError::new_with_pos("Type mismatch", Location::new(1, 5))
@@ -213,10 +213,10 @@ mod tests {
 
         #[test]
         fn test_unary_not_float() {
-            assert_has_variable!(interpret("X = NOT 3.14"), "X", -4.0_f32);
-            assert_has_variable!(interpret("X = NOT 3.5#"), "X", -5.0_f32);
-            assert_has_variable!(interpret("X = NOT -1.1"), "X", 0.0_f32);
-            assert_has_variable!(interpret("X = NOT -1.5"), "X", 1.0_f32);
+            assert_has_variable!(interpret("X = NOT 3.14"), "X!", -4.0_f32);
+            assert_has_variable!(interpret("X = NOT 3.5#"), "X!", -5.0_f32);
+            assert_has_variable!(interpret("X = NOT -1.1"), "X!", 0.0_f32);
+            assert_has_variable!(interpret("X = NOT -1.5"), "X!", 1.0_f32);
             assert_eq!(
                 interpret_err("X = NOT \"hello\""),
                 InterpreterError::new_with_pos("Type mismatch", Location::new(1, 5))

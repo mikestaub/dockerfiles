@@ -1,6 +1,6 @@
 use super::{err, Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::parser::*;
+use crate::linter::*;
 use crate::variant::Variant;
 
 impl InstructionGenerator {
@@ -39,13 +39,18 @@ impl InstructionGenerator {
                 self.push(Instruction::Load(Variant::from(s)), pos);
                 Ok(())
             }
-            Expression::VariableName(name) => {
-                if !only_const || self.constants.contains(name.bare_name()) {
+            Expression::Variable(name) => {
+                if !only_const {
                     self.push(Instruction::CopyVarToA(name), pos);
                     Ok(())
                 } else {
+                    // TODO this is probably caught by liter now
                     err("Invalid constant", pos)
                 }
+            }
+            Expression::Constant(name) => {
+                self.push(Instruction::CopyVarToA(name), pos);
+                Ok(())
             }
             Expression::FunctionCall(n, args) => {
                 if only_const {

@@ -2,7 +2,7 @@
 mod tests {
     use super::super::test_utils::*;
     use crate::assert_has_variable;
-    use crate::assert_pre_process_err;
+    use crate::assert_linter_err;
     use crate::common::*;
     use crate::interpreter::InterpreterError;
     use crate::variant::Variant;
@@ -148,7 +148,7 @@ mod tests {
             PRINT i%
         NEXT i
         ";
-        assert_pre_process_err!(input, "NEXT without FOR", 4, 14);
+        assert_linter_err!(input, "NEXT without FOR", 4, 14);
     }
 
     #[test]
@@ -165,5 +165,18 @@ mod tests {
         assert_has_variable!(interpreter, "N%", 0);
         let stdlib = interpreter.stdlib;
         assert_eq!(stdlib.output, vec!["1", "2", "3"]);
+    }
+
+    #[test]
+    fn test_nested_for_loop() {
+        let input = "
+        FOR I = 1 to 2
+        FOR J = 3 to 4
+        PRINT I, J
+        NEXT
+        NEXT
+        ";
+        let interpreter = interpret(input);
+        assert_eq!(interpreter.stdlib.output, vec!["1 3", "1 4", "2 3", "2 4"]);
     }
 }

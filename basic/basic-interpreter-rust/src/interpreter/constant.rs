@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
+    use crate::assert_linter_err;
     use crate::common::*;
     use crate::interpreter::InterpreterError;
 
@@ -33,10 +34,7 @@ mod tests {
             CONST X = 42
             PRINT X!
             ";
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 19))
-            );
+            assert_linter_err!(program, "Duplicate definition", 3, 19);
         }
 
         #[test]
@@ -46,10 +44,7 @@ mod tests {
             CONST X = 32
             PRINT X
             ";
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 19))
-            );
+            assert_linter_err!(program, "Duplicate definition", 3, 19);
         }
 
         #[test]
@@ -59,10 +54,7 @@ mod tests {
             CONST X = 33
             PRINT X
             ";
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 19))
-            );
+            assert_linter_err!(program, "Duplicate definition", 3, 19);
         }
     }
 
@@ -95,10 +87,7 @@ mod tests {
             CONST X = 3.14
             X = 6.28
             ";
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Duplicate definition", Location::new(3, 13))
-            );
+            assert_linter_err!(program, "Duplicate definition", 3, 13);
         }
     }
 
@@ -152,6 +141,15 @@ mod tests {
             let interpreter = interpret(program);
             assert_eq!(interpreter.stdlib.output, vec!["3.14"]);
         }
+
+        #[test]
+        fn qualified_usage_from_string_literal() {
+            let program = r#"
+            CONST X! = "hello"
+            PRINT X!
+            "#;
+            assert_linter_err!(program, "Type mismatch", 2, 24);
+        }
     }
 
     mod qualified_integer_declaration {
@@ -163,16 +161,13 @@ mod tests {
             CONST X% = "hello"
             PRINT X
             "#;
-            assert_eq!(
-                interpret_err(program),
-                InterpreterError::new_with_pos("Type mismatch", Location::new(2, 19))
-            );
+            assert_linter_err!(program, "Type mismatch", 2, 24);
         }
     }
 
     mod expressions {
         use super::*;
-        use crate::assert_pre_process_err;
+        use crate::assert_linter_err;
 
         #[test]
         fn binary_plus() {
@@ -224,7 +219,7 @@ mod tests {
             CONST X = Add(1, 2)
             PRINT X
             "#;
-            assert_pre_process_err!(program, "Invalid constant", 2, 23);
+            assert_linter_err!(program, "Invalid constant", 2, 23);
         }
 
         #[test]
@@ -234,7 +229,7 @@ mod tests {
             CONST A = X + 1
             PRINT A
             "#;
-            assert_pre_process_err!(program, "Invalid constant", 3, 23);
+            assert_linter_err!(program, "Invalid constant", 3, 23);
         }
     }
 

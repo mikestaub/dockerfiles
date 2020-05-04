@@ -9,8 +9,12 @@
 // Mission: remove the need for TypeResolver in Interpreter
 
 use crate::common::*;
+use crate::parser;
 use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::*;
+use crate::parser::{
+    BareName, BareNameNode, HasQualifier, Name, NameNode, NameTrait, Operand, QualifiedName,
+    TypeQualifier, TypeResolver, UnaryOperand,
+};
 
 use std::collections::{HashMap, HashSet};
 
@@ -21,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 pub type Error = Locatable<String>;
 pub type Result<T> = std::result::Result<T, Error>;
 fn err<T, S: AsRef<str>>(msg: S, pos: Location) -> Result<T> {
-    Err(Locatable::new(msg.as_ref().to_string(), pos))
+    Err(Locatable::new(format!("[L] {}", msg.as_ref()), pos))
 }
 
 //
@@ -155,16 +159,18 @@ impl FunctionContext {
     }
 }
 
-impl Visitor<TopLevelTokenNode> for FunctionContext {
-    fn visit(&mut self, a: &TopLevelTokenNode) -> Result<()> {
+impl Visitor<parser::TopLevelTokenNode> for FunctionContext {
+    fn visit(&mut self, a: &parser::TopLevelTokenNode) -> Result<()> {
         let pos = a.location();
         match a.as_ref() {
-            TopLevelToken::DefType(d) => {
+            parser::TopLevelToken::DefType(d) => {
                 self.resolver.set(d);
                 Ok(())
             }
-            TopLevelToken::FunctionDeclaration(n, params) => self.add_declaration(n, params, pos),
-            TopLevelToken::FunctionImplementation(n, params, _) => {
+            parser::TopLevelToken::FunctionDeclaration(n, params) => {
+                self.add_declaration(n, params, pos)
+            }
+            parser::TopLevelToken::FunctionImplementation(n, params, _) => {
                 self.add_implementation(n, params, pos)
             }
             _ => Ok(()),
@@ -172,11 +178,11 @@ impl Visitor<TopLevelTokenNode> for FunctionContext {
     }
 }
 
-impl PostVisitor<ProgramNode> for FunctionContext {
-    fn post_visit(&mut self, _: &ProgramNode) -> Result<()> {
+impl PostVisitor<parser::ProgramNode> for FunctionContext {
+    fn post_visit(&mut self, _: &parser::ProgramNode) -> Result<()> {
         for (k, v) in self.declarations.iter() {
             if !self.implementations.contains_key(k) {
-                return err("Missing implementation", v.2);
+                return err("Subprogram not defined", v.2);
             }
         }
         Ok(())
@@ -275,18 +281,18 @@ impl SubContext {
     }
 }
 
-impl Visitor<TopLevelTokenNode> for SubContext {
-    fn visit(&mut self, a: &TopLevelTokenNode) -> Result<()> {
+impl Visitor<parser::TopLevelTokenNode> for SubContext {
+    fn visit(&mut self, a: &parser::TopLevelTokenNode) -> Result<()> {
         let pos = a.location();
         match a.as_ref() {
-            TopLevelToken::DefType(d) => {
+            parser::TopLevelToken::DefType(d) => {
                 self.resolver.set(d);
                 Ok(())
             }
-            TopLevelToken::SubDeclaration(n, params) => {
+            parser::TopLevelToken::SubDeclaration(n, params) => {
                 self.add_declaration(n.as_ref(), params, pos)
             }
-            TopLevelToken::SubImplementation(n, params, _) => {
+            parser::TopLevelToken::SubImplementation(n, params, _) => {
                 self.add_implementation(n.as_ref(), params, pos)
             }
             _ => Ok(()),
@@ -294,8 +300,8 @@ impl Visitor<TopLevelTokenNode> for SubContext {
     }
 }
 
-impl PostVisitor<ProgramNode> for SubContext {
-    fn post_visit(&mut self, _: &ProgramNode) -> Result<()> {
+impl PostVisitor<parser::ProgramNode> for SubContext {
+    fn post_visit(&mut self, _: &parser::ProgramNode) -> Result<()> {
         for (k, v) in self.declarations.iter() {
             if !self.implementations.contains_key(k) {
                 return err("Missing implementation", v.1);
@@ -311,7 +317,7 @@ impl PostVisitor<ProgramNode> for SubContext {
 /// - No duplicate implementations
 /// - No conflicts between declarations and implementations
 /// - Resolves types of parameters and functions
-fn collect_subprograms(p: &ProgramNode) -> Result<(FunctionMap, SubMap)> {
+fn collect_subprograms(p: &parser::ProgramNode) -> Result<(FunctionMap, SubMap)> {
     let mut f_c = FunctionContext::new();
     f_c.visit(p)?;
     let mut s_c = SubContext::new();
@@ -394,10 +400,7 @@ struct LinterContext {
 }
 
 impl LinterContext {
-    pub fn get_constant_type<N: NameTrait + HasLocation>(
-        &self,
-        n: &N,
-    ) -> Result<Option<TypeQualifier>> {
+    pub fn get_constant_type(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
         let bare_name: &CaseInsensitiveString = n.bare_name();
         match self.constants.get(bare_name) {
             Some(const_type) => {
@@ -405,17 +408,14 @@ impl LinterContext {
                 if n.bare_or_eq(*const_type) {
                     Ok(Some(*const_type))
                 } else {
-                    err("Duplicate definition", n.location())
+                    err("Duplicate definition", Location::zero())
                 }
             }
             None => Ok(None),
         }
     }
 
-    pub fn get_parent_constant_type<N: NameTrait + HasLocation>(
-        &self,
-        n: &N,
-    ) -> Result<Option<TypeQualifier>> {
+    pub fn get_parent_constant_type(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
         match &self.parent {
             Some(p) => {
                 let x = p.get_constant_type(n)?;
@@ -428,10 +428,7 @@ impl LinterContext {
         }
     }
 
-    pub fn get_constant_type_recursively<N: NameTrait + HasLocation>(
-        &self,
-        n: &N,
-    ) -> Result<Option<TypeQualifier>> {
+    pub fn get_constant_type_recursively(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
         match self.get_constant_type(n)? {
             Some(q) => Ok(Some(q)),
             None => match &self.parent {
@@ -477,14 +474,6 @@ impl Linter {
         }
     }
 
-    pub fn resolve_args_type(&self, args: &Vec<ExpressionNode>) -> Result<Vec<TypeQualifier>> {
-        let mut result: Vec<TypeQualifier> = vec![];
-        for a in args.iter() {
-            result.push(self.resolve_expression_type(a)?);
-        }
-        Ok(result)
-    }
-
     pub fn resolve_expression_type(&self, e_node: &ExpressionNode) -> Result<TypeQualifier> {
         let pos = e_node.location();
         let e: &Expression = e_node.as_ref();
@@ -494,34 +483,9 @@ impl Linter {
             Expression::StringLiteral(_) => Ok(TypeQualifier::DollarString),
             Expression::IntegerLiteral(_) => Ok(TypeQualifier::PercentInteger),
             Expression::LongLiteral(_) => Ok(TypeQualifier::AmpersandLong),
-            Expression::VariableName(name) => {
-                let name_node: NameNode = name.clone().at(pos);
-                match self.context.get_constant_type_recursively(&name_node)? {
-                    Some(q) => Ok(q),
-                    None => Ok(self.resolver.resolve(name)),
-                }
-            }
-            Expression::FunctionCall(n, args) => {
-                let bare_name = n.bare_name();
-                match self.functions.get(bare_name) {
-                    Some((udf_type, udf_param_types, _)) => {
-                        if args.len() != udf_param_types.len() {
-                            err("Argument count mismatch", pos)
-                        } else if !n.bare_or_eq(*udf_type) {
-                            err("Type mismatch", pos)
-                        } else if udf_param_types != &self.resolve_args_type(args)? {
-                            // TODO specify the location of the offending argument
-                            err("Type mismatch", pos)
-                        } else {
-                            Ok(*udf_type)
-                        }
-                    }
-                    None => {
-                        // TODO support built-in and undefined functions
-                        Ok(self.resolver.resolve(n))
-                    }
-                }
-            }
+            Expression::Variable(name)
+            | Expression::Constant(name)
+            | Expression::FunctionCall(name, _) => Ok(name.qualifier()),
             Expression::BinaryExpression(op, l, r) => {
                 let q_left = self.resolve_expression_type(l)?;
                 let q_right = self.resolve_expression_type(r)?;
@@ -549,50 +513,10 @@ impl Linter {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct QForLoopNode {
-    pub variable_name: QNameNode,
-    pub lower_bound: QExpressionNode,
-    pub upper_bound: QExpressionNode,
-    pub step: Option<QExpressionNode>,
-    pub statements: QStatementNodes,
-    pub next_counter: Option<QNameNode>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct QConditionalBlockNode {
-    pub condition: QExpressionNode,
-    pub statements: QStatementNodes,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct QIfBlockNode {
-    pub if_block: QConditionalBlockNode,
-    pub else_if_blocks: Vec<QConditionalBlockNode>,
-    pub else_block: Option<QStatementNodes>,
-}
-
 pub type QNameNode = Locatable<QualifiedName>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QStatement {
-    SubCall(BareName, Vec<QExpressionNode>),
-    ForLoop(QForLoopNode),
-    IfBlock(QIfBlockNode),
-    Assignment(QualifiedName, QExpressionNode),
-    While(QConditionalBlockNode),
-    Const(QNameNode, QExpressionNode),
-    ErrorHandler(CaseInsensitiveString),
-    Label(CaseInsensitiveString),
-    GoTo(CaseInsensitiveString),
-    SetReturnValue(QExpressionNode),
-}
-
-pub type QStatementNode = Locatable<QStatement>;
-pub type QStatementNodes = Vec<QStatementNode>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum QExpression {
+pub enum Expression {
     SingleLiteral(f32),
     DoubleLiteral(f64),
     StringLiteral(String),
@@ -601,47 +525,98 @@ pub enum QExpression {
     LongLiteral(i64),
     Constant(QualifiedName),
     Variable(QualifiedName),
-    FunctionCall(QualifiedName, Vec<QExpressionNode>),
-    BinaryExpression(Operand, Box<QExpressionNode>, Box<QExpressionNode>),
-    UnaryExpression(UnaryOperand, Box<QExpressionNode>),
+    FunctionCall(QualifiedName, Vec<ExpressionNode>),
+    BinaryExpression(Operand, Box<ExpressionNode>, Box<ExpressionNode>),
+    UnaryExpression(UnaryOperand, Box<ExpressionNode>),
 }
 
-pub type QExpressionNode = Locatable<QExpression>;
+pub type ExpressionNode = Locatable<Expression>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum QTopLevelToken {
-    /// A function implementation
-    FunctionImplementation(QNameNode, Vec<QNameNode>, QStatementNodes),
-
-    /// A simple or compound statement
-    Statement(QStatement),
-
-    /// A sub implementation
-    SubImplementation(BareNameNode, Vec<QNameNode>, QStatementNodes),
+pub struct ForLoopNode {
+    pub variable_name: QNameNode,
+    pub lower_bound: ExpressionNode,
+    pub upper_bound: ExpressionNode,
+    pub step: Option<ExpressionNode>,
+    pub statements: StatementNodes,
+    pub next_counter: Option<QNameNode>,
 }
 
-pub type QTopLevelTokenNode = Locatable<QTopLevelToken>;
-pub type QProgramNode = Vec<QTopLevelTokenNode>;
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConditionalBlockNode {
+    pub condition: ExpressionNode,
+    pub statements: StatementNodes,
+}
 
-impl Converter<ProgramNode, QProgramNode> for Linter {
-    fn convert(&mut self, a: ProgramNode) -> Result<QProgramNode> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfBlockNode {
+    pub if_block: ConditionalBlockNode,
+    pub else_if_blocks: Vec<ConditionalBlockNode>,
+    pub else_block: Option<StatementNodes>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Statement {
+    SubCall(BareName, Vec<ExpressionNode>),
+    ForLoop(ForLoopNode),
+    IfBlock(IfBlockNode),
+    Assignment(QualifiedName, ExpressionNode),
+    While(ConditionalBlockNode),
+    Const(QNameNode, ExpressionNode),
+    ErrorHandler(CaseInsensitiveString),
+    Label(CaseInsensitiveString),
+    GoTo(CaseInsensitiveString),
+    SetReturnValue(ExpressionNode),
+}
+
+pub type StatementNode = Locatable<Statement>;
+pub type StatementNodes = Vec<StatementNode>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TopLevelToken {
+    /// A function implementation
+    FunctionImplementation(QNameNode, Vec<QNameNode>, StatementNodes),
+
+    /// A simple or compound statement
+    Statement(Statement),
+
+    /// A sub implementation
+    SubImplementation(BareNameNode, Vec<QNameNode>, StatementNodes),
+}
+
+pub type TopLevelTokenNode = Locatable<TopLevelToken>;
+pub type ProgramNode = Vec<TopLevelTokenNode>;
+
+pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode> {
+    let mut linter = Linter::default();
+    linter.convert(program)
+}
+
+impl Converter<parser::ProgramNode, ProgramNode> for Linter {
+    fn convert(&mut self, a: parser::ProgramNode) -> Result<ProgramNode> {
         let (f, s) = collect_subprograms(&a)?;
         self.functions = f;
         self.subs = s;
 
-        let mut result: Vec<QTopLevelTokenNode> = vec![];
+        let mut result: Vec<TopLevelTokenNode> = vec![];
         for top_level_token_node in a.into_iter() {
             // will contain None where DefInt and declarations used to be
             let (top_level_token, pos) = top_level_token_node.consume();
-            let opt: Option<QTopLevelToken> = self.convert(top_level_token)?;
+            let opt: Option<TopLevelToken> = self
+                .convert(top_level_token)
+                .map_err(|e| e.at_non_zero_location(pos))?;
             match opt {
                 Some(t) => {
-                    let r: QTopLevelTokenNode = t.at(pos);
+                    let r: TopLevelTokenNode = t.at(pos);
                     result.push(r);
                 }
                 _ => (),
             }
         }
+
+        NoDynamicConst::no_dynamic_const(&result)?;
+        ForNextCounterMatch::for_next_counter_match(&result)?;
+
         Ok(result)
     }
 }
@@ -659,22 +634,23 @@ impl Converter<Name, QualifiedName> for Linter {
 }
 
 // Option because we filter out DefType
-impl Converter<TopLevelToken, Option<QTopLevelToken>> for Linter {
-    fn convert(&mut self, a: TopLevelToken) -> Result<Option<QTopLevelToken>> {
+impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
+    fn convert(&mut self, a: parser::TopLevelToken) -> Result<Option<TopLevelToken>> {
         match a {
-            TopLevelToken::DefType(d) => {
+            parser::TopLevelToken::DefType(d) => {
                 self.resolver.set(&d);
                 Ok(None)
             }
-            TopLevelToken::FunctionDeclaration(_, _) | TopLevelToken::SubDeclaration(_, _) => {
-                Ok(None)
-            }
-            TopLevelToken::FunctionImplementation(n, params, block) => {
+            parser::TopLevelToken::FunctionDeclaration(_, _)
+            | parser::TopLevelToken::SubDeclaration(_, _) => Ok(None),
+            parser::TopLevelToken::FunctionImplementation(n, params, block) => {
                 let mapped_name = self.convert(n)?;
                 let mapped_params = self.convert(params)?;
-                // register variables
                 self.push_function_context(mapped_name.bare_name());
-                let mapped = QTopLevelToken::FunctionImplementation(
+                for q_n_n in mapped_params.iter() {
+                    self.context.variables.insert(q_n_n.bare_name().clone());
+                }
+                let mapped = TopLevelToken::FunctionImplementation(
                     mapped_name,
                     mapped_params,
                     self.convert(block)?,
@@ -682,27 +658,31 @@ impl Converter<TopLevelToken, Option<QTopLevelToken>> for Linter {
                 self.pop_context();
                 Ok(Some(mapped))
             }
-            TopLevelToken::SubImplementation(n, params, block) => {
+            parser::TopLevelToken::SubImplementation(n, params, block) => {
                 let mapped_params = self.convert(params)?;
                 self.push_sub_context(n.bare_name());
-                // register variables
+                for q_n_n in mapped_params.iter() {
+                    self.context.variables.insert(q_n_n.bare_name().clone());
+                }
                 let mapped =
-                    QTopLevelToken::SubImplementation(n, mapped_params, self.convert(block)?);
+                    TopLevelToken::SubImplementation(n, mapped_params, self.convert(block)?);
                 self.pop_context();
                 Ok(Some(mapped))
             }
-            TopLevelToken::Statement(s) => Ok(Some(QTopLevelToken::Statement(self.convert(s)?))),
+            parser::TopLevelToken::Statement(s) => {
+                Ok(Some(TopLevelToken::Statement(self.convert(s)?)))
+            }
         }
     }
 }
 
-impl Converter<Statement, QStatement> for Linter {
-    fn convert(&mut self, a: Statement) -> Result<QStatement> {
+impl Converter<parser::Statement, Statement> for Linter {
+    fn convert(&mut self, a: parser::Statement) -> Result<Statement> {
         match a {
-            Statement::SubCall(n, args) => Ok(QStatement::SubCall(n, self.convert(args)?)),
-            Statement::ForLoop(f) => Ok(QStatement::ForLoop(self.convert(f)?)),
-            Statement::IfBlock(i) => Ok(QStatement::IfBlock(self.convert(i)?)),
-            Statement::Assignment(n, e) => {
+            parser::Statement::SubCall(n, args) => Ok(Statement::SubCall(n, self.convert(args)?)),
+            parser::Statement::ForLoop(f) => Ok(Statement::ForLoop(self.convert(f)?)),
+            parser::Statement::IfBlock(i) => Ok(Statement::IfBlock(self.convert(i)?)),
+            parser::Statement::Assignment(n, e) => {
                 if self
                     .context
                     .function_name
@@ -714,7 +694,7 @@ impl Converter<Statement, QStatement> for Linter {
                     let function_type: TypeQualifier = self.functions.get(n.bare_name()).unwrap().0;
                     if n.bare_or_eq(function_type) {
                         // TODO check if casting is possible
-                        Ok(QStatement::SetReturnValue(self.convert(e)?))
+                        Ok(Statement::SetReturnValue(self.convert(e)?))
                     } else {
                         err("Duplicate definition", Location::zero())
                     }
@@ -728,65 +708,121 @@ impl Converter<Statement, QStatement> for Linter {
                     // trying to assign to the sub name should always be an error hopefully
                     err("Cannot assign to sub", Location::zero())
                 } else {
-                    // TODO: it is possible to overwrite a const inside a function/sub
-                    // register variable
-                    Ok(QStatement::Assignment(self.convert(n)?, self.convert(e)?))
+                    if self.context.constants.contains_key(n.bare_name()) {
+                        // cannot overwrite local constant
+                        err("Duplicate definition", Location::zero())
+                    } else {
+                        // TODO check if casting is possible
+                        self.context.variables.insert(n.bare_name().clone());
+                        Ok(Statement::Assignment(self.convert(n)?, self.convert(e)?))
+                    }
                 }
             }
-            Statement::While(c) => Ok(QStatement::While(self.convert(c)?)),
-            Statement::Const(n, e) => {
-                // bare name resolves from right side, not resolver
-                // register constant
-                Ok(QStatement::Const(self.convert(n)?, self.convert(e)?))
+            parser::Statement::While(c) => Ok(Statement::While(self.convert(c)?)),
+            parser::Statement::Const(n, e) => {
+                let (name, pos) = n.consume();
+                if self.context.variables.contains(name.bare_name())
+                    || self.context.constants.contains_key(name.bare_name())
+                {
+                    // local variable or local constant already present by that name
+                    err("Duplicate definition", pos)
+                } else {
+                    let converted_expression_node = self.convert(e)?;
+                    let e_type = self.resolve_expression_type(&converted_expression_node)?;
+                    match name {
+                        Name::Bare(b) => {
+                            // bare name resolves from right side, not resolver
+                            self.context.constants.insert(b.clone(), e_type);
+                            Ok(Statement::Const(
+                                QualifiedName::new(b, e_type).at(pos),
+                                converted_expression_node,
+                            ))
+                        }
+                        Name::Qualified(q) => {
+                            if e_type.can_cast_to(q.qualifier()) {
+                                self.context
+                                    .constants
+                                    .insert(q.bare_name().clone(), q.qualifier());
+                                Ok(Statement::Const(q.at(pos), converted_expression_node))
+                            } else {
+                                err("Type mismatch", converted_expression_node.location())
+                            }
+                        }
+                    }
+                }
             }
-            Statement::ErrorHandler(l) => Ok(QStatement::ErrorHandler(l)),
-            Statement::Label(l) => Ok(QStatement::Label(l)),
-            Statement::GoTo(l) => Ok(QStatement::GoTo(l)),
-            Statement::InternalSetReturnValue(_) => unimplemented!(),
+            parser::Statement::ErrorHandler(l) => Ok(Statement::ErrorHandler(l)),
+            parser::Statement::Label(l) => Ok(Statement::Label(l)),
+            parser::Statement::GoTo(l) => Ok(Statement::GoTo(l)),
         }
     }
 }
 
-impl Converter<Expression, QExpression> for Linter {
-    fn convert(&mut self, a: Expression) -> Result<QExpression> {
+impl Converter<parser::Expression, Expression> for Linter {
+    fn convert(&mut self, a: parser::Expression) -> Result<Expression> {
         match a {
-            Expression::SingleLiteral(f) => Ok(QExpression::SingleLiteral(f)),
-            Expression::DoubleLiteral(f) => Ok(QExpression::DoubleLiteral(f)),
-            Expression::StringLiteral(f) => Ok(QExpression::StringLiteral(f)),
-            Expression::IntegerLiteral(f) => Ok(QExpression::IntegerLiteral(f)),
-            Expression::LongLiteral(f) => Ok(QExpression::LongLiteral(f)),
-            Expression::VariableName(n) => {
-                // or constant?
-                Ok(QExpression::Variable(self.convert(n)?))
+            parser::Expression::SingleLiteral(f) => Ok(Expression::SingleLiteral(f)),
+            parser::Expression::DoubleLiteral(f) => Ok(Expression::DoubleLiteral(f)),
+            parser::Expression::StringLiteral(f) => Ok(Expression::StringLiteral(f)),
+            parser::Expression::IntegerLiteral(f) => Ok(Expression::IntegerLiteral(f)),
+            parser::Expression::LongLiteral(f) => Ok(Expression::LongLiteral(f)),
+            parser::Expression::VariableName(n) => {
+                // check for a local constant
+                match self.context.get_constant_type(&n)? {
+                    Some(q) => Ok(Expression::Constant(QualifiedName::new(
+                        n.bare_name().clone(),
+                        q,
+                    ))),
+                    None => {
+                        // check for an already defined local variable or parameter
+                        // TODO: type might be important, but it is ignored on the next check
+                        if self.context.variables.contains(n.bare_name()) {
+                            Ok(Expression::Variable(self.convert(n)?))
+                        } else {
+                            // parent constant?
+                            match self.context.get_parent_constant_type(&n)? {
+                                Some(q) => Ok(Expression::Constant(QualifiedName::new(
+                                    n.bare_name().clone(),
+                                    q,
+                                ))),
+                                None => {
+                                    // e.g. INPUT N, where N has not been declared in advance
+                                    // TODO: register N as a variable?
+                                    Ok(Expression::Variable(self.convert(n)?))
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            Expression::FunctionCall(n, args) => {
+            parser::Expression::FunctionCall(n, args) => {
                 // validate arg count, arg types, name type
                 // for built-in and for user-defined
                 // for undefined, resolve to literal 0, as long as the arguments do not contain a string
-                Ok(QExpression::FunctionCall(
+                Ok(Expression::FunctionCall(
                     self.convert(n)?,
                     self.convert(args)?,
                 ))
             }
-            Expression::BinaryExpression(op, l, r) => {
+            parser::Expression::BinaryExpression(op, l, r) => {
                 // types match?
-                Ok(QExpression::BinaryExpression(
+                Ok(Expression::BinaryExpression(
                     op,
                     self.convert(l)?,
                     self.convert(r)?,
                 ))
             }
-            Expression::UnaryExpression(op, c) => {
+            parser::Expression::UnaryExpression(op, c) => {
                 // is it a legal op? e.g. -"hello" isn't
-                Ok(QExpression::UnaryExpression(op, self.convert(c)?))
+                Ok(Expression::UnaryExpression(op, self.convert(c)?))
             }
         }
     }
 }
 
-impl Converter<ForLoopNode, QForLoopNode> for Linter {
-    fn convert(&mut self, a: ForLoopNode) -> Result<QForLoopNode> {
-        Ok(QForLoopNode {
+impl Converter<parser::ForLoopNode, ForLoopNode> for Linter {
+    fn convert(&mut self, a: parser::ForLoopNode) -> Result<ForLoopNode> {
+        Ok(ForLoopNode {
             variable_name: self.convert(a.variable_name)?,
             lower_bound: self.convert(a.lower_bound)?,
             upper_bound: self.convert(a.upper_bound)?,
@@ -797,21 +833,176 @@ impl Converter<ForLoopNode, QForLoopNode> for Linter {
     }
 }
 
-impl Converter<ConditionalBlockNode, QConditionalBlockNode> for Linter {
-    fn convert(&mut self, a: ConditionalBlockNode) -> Result<QConditionalBlockNode> {
-        Ok(QConditionalBlockNode {
+impl Converter<parser::ConditionalBlockNode, ConditionalBlockNode> for Linter {
+    fn convert(&mut self, a: parser::ConditionalBlockNode) -> Result<ConditionalBlockNode> {
+        Ok(ConditionalBlockNode {
             condition: self.convert(a.condition)?,
             statements: self.convert(a.statements)?,
         })
     }
 }
 
-impl Converter<IfBlockNode, QIfBlockNode> for Linter {
-    fn convert(&mut self, a: IfBlockNode) -> Result<QIfBlockNode> {
-        Ok(QIfBlockNode {
+impl Converter<parser::IfBlockNode, IfBlockNode> for Linter {
+    fn convert(&mut self, a: parser::IfBlockNode) -> Result<IfBlockNode> {
+        Ok(IfBlockNode {
             if_block: self.convert(a.if_block)?,
             else_if_blocks: self.convert(a.else_if_blocks)?,
             else_block: self.convert(a.else_block)?,
         })
+    }
+}
+
+pub trait NoDynamicConst {
+    fn no_dynamic_const(node: &Self) -> Result<()>;
+}
+
+impl<T: std::fmt::Debug + Sized + NoDynamicConst> NoDynamicConst for Locatable<T> {
+    fn no_dynamic_const(node: &Self) -> Result<()> {
+        T::no_dynamic_const(node.as_ref()).map_err(|e| e.at_non_zero_location(node.location()))
+    }
+}
+
+impl<T: std::fmt::Debug + Sized + NoDynamicConst> NoDynamicConst for Vec<T> {
+    fn no_dynamic_const(block: &Self) -> Result<()> {
+        for statement in block {
+            T::no_dynamic_const(statement)?;
+        }
+        Ok(())
+    }
+}
+
+impl NoDynamicConst for TopLevelToken {
+    fn no_dynamic_const(top_level_token: &Self) -> Result<()> {
+        match top_level_token {
+            TopLevelToken::Statement(s) => Statement::no_dynamic_const(s),
+            TopLevelToken::FunctionImplementation(_, _, b) => StatementNodes::no_dynamic_const(b),
+            TopLevelToken::SubImplementation(_, _, b) => StatementNodes::no_dynamic_const(b),
+        }
+    }
+}
+
+impl NoDynamicConst for Statement {
+    fn no_dynamic_const(statement: &Self) -> Result<()> {
+        match statement {
+            Self::ForLoop(f) => StatementNodes::no_dynamic_const(&f.statements),
+            Self::IfBlock(i) => {
+                ConditionalBlockNode::no_dynamic_const(&i.if_block)?;
+                for else_if_block in &i.else_if_blocks {
+                    ConditionalBlockNode::no_dynamic_const(&else_if_block)?;
+                }
+                match &i.else_block {
+                    Some(x) => StatementNodes::no_dynamic_const(x),
+                    None => Ok(()),
+                }
+            }
+            Self::While(w) => ConditionalBlockNode::no_dynamic_const(w),
+            Self::Const(_, right) => ExpressionNode::no_dynamic_const(right),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl NoDynamicConst for ConditionalBlockNode {
+    fn no_dynamic_const(e: &Self) -> Result<()> {
+        StatementNodes::no_dynamic_const(&e.statements)
+    }
+}
+
+impl NoDynamicConst for ExpressionNode {
+    fn no_dynamic_const(e_node: &Self) -> Result<()> {
+        let e: &Expression = e_node.as_ref();
+        match e {
+            Expression::FunctionCall(_, _) | Expression::Variable(_) => {
+                err("Invalid constant", e_node.location())
+            }
+            Expression::BinaryExpression(_, left, right) => {
+                let unboxed_left: &Self = left;
+                let unboxed_right: &Self = right;
+                Self::no_dynamic_const(unboxed_left)?;
+                Self::no_dynamic_const(unboxed_right)
+            }
+            Expression::UnaryExpression(_, child) => {
+                let unboxed_child: &Self = child;
+                Self::no_dynamic_const(unboxed_child)
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+pub trait ForNextCounterMatch {
+    fn for_next_counter_match(node: &Self) -> Result<()>;
+}
+
+impl<T: std::fmt::Debug + Sized + ForNextCounterMatch> ForNextCounterMatch for Locatable<T> {
+    fn for_next_counter_match(node: &Self) -> Result<()> {
+        T::for_next_counter_match(node.as_ref())
+            .map_err(|e| e.at_non_zero_location(node.location()))
+    }
+}
+
+impl<T: std::fmt::Debug + Sized + ForNextCounterMatch> ForNextCounterMatch for Vec<T> {
+    fn for_next_counter_match(block: &Self) -> Result<()> {
+        for statement in block {
+            T::for_next_counter_match(statement)?;
+        }
+        Ok(())
+    }
+}
+
+impl ForNextCounterMatch for TopLevelToken {
+    fn for_next_counter_match(top_level_token: &Self) -> Result<()> {
+        match top_level_token {
+            TopLevelToken::Statement(s) => Statement::for_next_counter_match(s),
+            TopLevelToken::FunctionImplementation(_, _, b) => {
+                StatementNodes::for_next_counter_match(b)
+            }
+            TopLevelToken::SubImplementation(_, _, b) => StatementNodes::for_next_counter_match(b),
+        }
+    }
+}
+
+impl ForNextCounterMatch for Statement {
+    fn for_next_counter_match(statement: &Self) -> Result<()> {
+        match statement {
+            Self::ForLoop(f) => ForLoopNode::for_next_counter_match(f),
+            Self::IfBlock(i) => {
+                ConditionalBlockNode::for_next_counter_match(&i.if_block)?;
+                for else_if_block in &i.else_if_blocks {
+                    ConditionalBlockNode::for_next_counter_match(&else_if_block)?;
+                }
+                match &i.else_block {
+                    Some(x) => StatementNodes::for_next_counter_match(x),
+                    None => Ok(()),
+                }
+            }
+            Self::While(w) => ConditionalBlockNode::for_next_counter_match(w),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl ForNextCounterMatch for ForLoopNode {
+    fn for_next_counter_match(f: &Self) -> Result<()> {
+        StatementNodes::for_next_counter_match(&f.statements)?;
+
+        // for and next counters must match
+        match &f.next_counter {
+            Some(n) => {
+                let next_var_name: &QualifiedName = n.as_ref();
+                if next_var_name == f.variable_name.as_ref() {
+                    Ok(())
+                } else {
+                    err("NEXT without FOR", n.location())
+                }
+            }
+            None => Ok(()),
+        }
+    }
+}
+
+impl ForNextCounterMatch for ConditionalBlockNode {
+    fn for_next_counter_match(c: &Self) -> Result<()> {
+        StatementNodes::for_next_counter_match(&c.statements)
     }
 }

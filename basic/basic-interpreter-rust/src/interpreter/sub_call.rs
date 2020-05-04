@@ -9,27 +9,27 @@ mod tests {
 
             #[test]
             fn test_input_empty() {
-                assert_input("", "N", 0.0_f32);
+                assert_input("", "N", "N!", 0.0_f32);
             }
 
             #[test]
             fn test_input_zero() {
-                assert_input("0", "N", 0.0_f32);
+                assert_input("0", "N", "N!", 0.0_f32);
             }
 
             #[test]
             fn test_input_single() {
-                assert_input("1.1", "N", 1.1_f32);
+                assert_input("1.1", "N", "N!", 1.1_f32);
             }
 
             #[test]
             fn test_input_negative() {
-                assert_input("-1.2345", "N", -1.2345_f32);
+                assert_input("-1.2345", "N", "N!", -1.2345_f32);
             }
 
             #[test]
             fn test_input_explicit_positive() {
-                assert_input("+3.14", "N", 3.14_f32);
+                assert_input("+3.14", "N", "N!", 3.14_f32);
             }
         }
 
@@ -38,12 +38,12 @@ mod tests {
 
             #[test]
             fn test_input_hello() {
-                assert_input("hello", "A$", "hello");
+                assert_input("hello", "A$", "A$", "hello");
             }
 
             #[test]
             fn test_input_does_not_trim_new_line() {
-                assert_input("hello\r\n", "A$", "hello\r\n");
+                assert_input("hello\r\n", "A$", "A$", "hello\r\n");
             }
         }
 
@@ -52,7 +52,7 @@ mod tests {
 
             #[test]
             fn test_input_42() {
-                assert_input("42", "A%", 42);
+                assert_input("42", "A%", "A%", 42);
             }
         }
     }
