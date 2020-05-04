@@ -8,322 +8,17 @@
 
 // Mission: remove the need for TypeResolver in Interpreter
 
+use super::error::*;
+use super::post_conversion_linter::PostConversionLinter;
+use super::subprogram_context::{collect_subprograms, FunctionMap, SubMap};
+use super::types::*;
 use crate::common::*;
 use crate::parser;
 use crate::parser::type_resolver_impl::TypeResolverImpl;
 use crate::parser::{
-    BareName, BareNameNode, HasQualifier, Name, NameNode, NameTrait, Operand, QualifiedName,
-    TypeQualifier, TypeResolver, UnaryOperand,
+    HasQualifier, Name, NameTrait, Operand, QualifiedName, TypeQualifier, TypeResolver,
 };
-
 use std::collections::{HashMap, HashSet};
-
-//
-// Result and error of this module
-//
-
-pub type Error = Locatable<String>;
-pub type Result<T> = std::result::Result<T, Error>;
-fn err<T, S: AsRef<str>>(msg: S, pos: Location) -> Result<T> {
-    Err(Locatable::new(format!("[L] {}", msg.as_ref()), pos))
-}
-
-//
-// Visitor trait
-//
-
-/// A visitor visits an object. It might update itself on each visit.
-pub trait Visitor<A> {
-    fn visit(&mut self, a: &A) -> Result<()>;
-}
-
-pub trait PostVisitor<A> {
-    fn post_visit(&mut self, a: &A) -> Result<()>;
-}
-
-/// Blanket visitor implementation for vectors.
-impl<T, A> Visitor<Vec<A>> for T
-where
-    T: Visitor<A> + PostVisitor<Vec<A>>,
-{
-    fn visit(&mut self, a: &Vec<A>) -> Result<()> {
-        for x in a.iter() {
-            self.visit(x)?;
-        }
-        self.post_visit(a)
-    }
-}
-
-//
-// Pass1 collect declared and implemented functions and subs
-//
-
-type ParamTypes = Vec<TypeQualifier>;
-type FunctionMap = HashMap<CaseInsensitiveString, (TypeQualifier, ParamTypes, Location)>;
-
-#[derive(Debug, Default)]
-struct FunctionContext {
-    resolver: TypeResolverImpl,
-    declarations: FunctionMap,
-    implementations: FunctionMap,
-}
-
-impl FunctionContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_declaration(
-        &mut self,
-        name: &NameNode,
-        params: &Vec<NameNode>,
-        pos: Location,
-    ) -> Result<()> {
-        // name does not have to be unique (duplicate identical declarations okay)
-        // conflicting declarations to previous declaration or implementation not okay
-        let q_params: Vec<TypeQualifier> =
-            params.iter().map(|p| self.resolver.resolve(p)).collect();
-        let q_name: TypeQualifier = self.resolver.resolve(name);
-        let bare_name = name.bare_name().clone();
-        self.check_implementation_type(&bare_name, &q_name, &q_params, pos)?;
-        match self.declarations.get(&bare_name) {
-            Some(_) => self.check_declaration_type(&bare_name, &q_name, &q_params, pos),
-            None => {
-                self.declarations.insert(bare_name, (q_name, q_params, pos));
-                Ok(())
-            }
-        }
-    }
-
-    pub fn add_implementation(
-        &mut self,
-        name: &NameNode,
-        params: &Vec<NameNode>,
-        pos: Location,
-    ) -> Result<()> {
-        // type must match declaration
-        // param count must match declaration
-        // param types must match declaration
-        // name needs to be unique
-        let q_params: Vec<TypeQualifier> =
-            params.iter().map(|p| self.resolver.resolve(p)).collect();
-        let q_name: TypeQualifier = self.resolver.resolve(name);
-        let bare_name = name.bare_name().clone();
-        match self.implementations.get(&bare_name) {
-            Some(_) => err("Duplicate definition", pos),
-            None => {
-                self.check_declaration_type(&bare_name, &q_name, &q_params, pos)?;
-                self.implementations
-                    .insert(bare_name, (q_name, q_params, pos));
-                Ok(())
-            }
-        }
-    }
-
-    fn check_declaration_type(
-        &self,
-        name: &CaseInsensitiveString,
-        q_name: &TypeQualifier,
-        q_params: &Vec<TypeQualifier>,
-        pos: Location,
-    ) -> Result<()> {
-        match self.declarations.get(name) {
-            Some((e_name, e_params, _)) => {
-                if e_name == q_name && e_params == q_params {
-                    Ok(())
-                } else {
-                    err("Type mismatch", pos)
-                }
-            }
-            None => Ok(()),
-        }
-    }
-
-    fn check_implementation_type(
-        &self,
-        name: &CaseInsensitiveString,
-        q_name: &TypeQualifier,
-        q_params: &Vec<TypeQualifier>,
-        pos: Location,
-    ) -> Result<()> {
-        match self.implementations.get(name) {
-            Some((e_name, e_params, _)) => {
-                if e_name == q_name && e_params == q_params {
-                    Ok(())
-                } else {
-                    err("Type mismatch", pos)
-                }
-            }
-            None => Ok(()),
-        }
-    }
-}
-
-impl Visitor<parser::TopLevelTokenNode> for FunctionContext {
-    fn visit(&mut self, a: &parser::TopLevelTokenNode) -> Result<()> {
-        let pos = a.location();
-        match a.as_ref() {
-            parser::TopLevelToken::DefType(d) => {
-                self.resolver.set(d);
-                Ok(())
-            }
-            parser::TopLevelToken::FunctionDeclaration(n, params) => {
-                self.add_declaration(n, params, pos)
-            }
-            parser::TopLevelToken::FunctionImplementation(n, params, _) => {
-                self.add_implementation(n, params, pos)
-            }
-            _ => Ok(()),
-        }
-    }
-}
-
-impl PostVisitor<parser::ProgramNode> for FunctionContext {
-    fn post_visit(&mut self, _: &parser::ProgramNode) -> Result<()> {
-        for (k, v) in self.declarations.iter() {
-            if !self.implementations.contains_key(k) {
-                return err("Subprogram not defined", v.2);
-            }
-        }
-        Ok(())
-    }
-}
-
-type SubMap = HashMap<CaseInsensitiveString, (ParamTypes, Location)>;
-
-#[derive(Debug, Default)]
-struct SubContext {
-    resolver: TypeResolverImpl,
-    declarations: SubMap,
-    implementations: SubMap,
-}
-
-impl SubContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_declaration(
-        &mut self,
-        name: &CaseInsensitiveString,
-        params: &Vec<NameNode>,
-        pos: Location,
-    ) -> Result<()> {
-        // name does not have to be unique (duplicate identical declarations okay)
-        // conflicting declarations to previous declaration or implementation not okay
-        let q_params: Vec<TypeQualifier> =
-            params.iter().map(|p| self.resolver.resolve(p)).collect();
-        self.check_implementation_type(name, &q_params, pos)?;
-        match self.declarations.get(name) {
-            Some(_) => self.check_declaration_type(name, &q_params, pos),
-            None => {
-                self.declarations.insert(name.clone(), (q_params, pos));
-                Ok(())
-            }
-        }
-    }
-
-    pub fn add_implementation(
-        &mut self,
-        name: &CaseInsensitiveString,
-        params: &Vec<NameNode>,
-        pos: Location,
-    ) -> Result<()> {
-        // param count must match declaration
-        // param types must match declaration
-        // name needs to be unique
-        let q_params: Vec<TypeQualifier> =
-            params.iter().map(|p| self.resolver.resolve(p)).collect();
-        match self.implementations.get(name) {
-            Some(_) => err("Duplicate definition", pos),
-            None => {
-                self.check_declaration_type(name, &q_params, pos)?;
-                self.implementations.insert(name.clone(), (q_params, pos));
-                Ok(())
-            }
-        }
-    }
-
-    fn check_declaration_type(
-        &self,
-        name: &CaseInsensitiveString,
-        q_params: &Vec<TypeQualifier>,
-        pos: Location,
-    ) -> Result<()> {
-        match self.declarations.get(name) {
-            Some((e_params, _)) => {
-                if e_params == q_params {
-                    Ok(())
-                } else {
-                    err("Type mismatch", pos)
-                }
-            }
-            None => Ok(()),
-        }
-    }
-
-    fn check_implementation_type(
-        &self,
-        name: &CaseInsensitiveString,
-        q_params: &Vec<TypeQualifier>,
-        pos: Location,
-    ) -> Result<()> {
-        match self.implementations.get(name) {
-            Some((e_params, _)) => {
-                if e_params == q_params {
-                    Ok(())
-                } else {
-                    err("Type mismatch", pos)
-                }
-            }
-            None => Ok(()),
-        }
-    }
-}
-
-impl Visitor<parser::TopLevelTokenNode> for SubContext {
-    fn visit(&mut self, a: &parser::TopLevelTokenNode) -> Result<()> {
-        let pos = a.location();
-        match a.as_ref() {
-            parser::TopLevelToken::DefType(d) => {
-                self.resolver.set(d);
-                Ok(())
-            }
-            parser::TopLevelToken::SubDeclaration(n, params) => {
-                self.add_declaration(n.as_ref(), params, pos)
-            }
-            parser::TopLevelToken::SubImplementation(n, params, _) => {
-                self.add_implementation(n.as_ref(), params, pos)
-            }
-            _ => Ok(()),
-        }
-    }
-}
-
-impl PostVisitor<parser::ProgramNode> for SubContext {
-    fn post_visit(&mut self, _: &parser::ProgramNode) -> Result<()> {
-        for (k, v) in self.declarations.iter() {
-            if !self.implementations.contains_key(k) {
-                return err("Missing implementation", v.1);
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Collects subprograms of the given program.
-/// Ensures that:
-/// - All declared subprograms are implemented
-/// - No duplicate implementations
-/// - No conflicts between declarations and implementations
-/// - Resolves types of parameters and functions
-fn collect_subprograms(p: &parser::ProgramNode) -> Result<(FunctionMap, SubMap)> {
-    let mut f_c = FunctionContext::new();
-    f_c.visit(p)?;
-    let mut s_c = SubContext::new();
-    s_c.visit(p)?;
-    Ok((f_c.implementations, s_c.implementations))
-}
 
 //
 // Converter trait
@@ -427,20 +122,10 @@ impl LinterContext {
             None => Ok(None),
         }
     }
-
-    pub fn get_constant_type_recursively(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
-        match self.get_constant_type(n)? {
-            Some(q) => Ok(Some(q)),
-            None => match &self.parent {
-                Some(p) => p.get_constant_type_recursively(n),
-                None => Ok(None),
-            },
-        }
-    }
 }
 
 #[derive(Debug, Default)]
-pub struct Linter {
+struct Linter {
     resolver: TypeResolverImpl,
     context: LinterContext,
     functions: FunctionMap,
@@ -500,7 +185,7 @@ impl Linter {
                     err("Type mismatch", pos)
                 }
             }
-            Expression::UnaryExpression(op, c) => {
+            Expression::UnaryExpression(_, c) => {
                 let q_child = self.resolve_expression_type(c)?;
                 if q_child == TypeQualifier::DollarString {
                     // no unary operator currently applicable to strings
@@ -513,91 +198,16 @@ impl Linter {
     }
 }
 
-pub type QNameNode = Locatable<QualifiedName>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Expression {
-    SingleLiteral(f32),
-    DoubleLiteral(f64),
-    StringLiteral(String),
-    IntegerLiteral(i32),
-    #[allow(dead_code)]
-    LongLiteral(i64),
-    Constant(QualifiedName),
-    Variable(QualifiedName),
-    FunctionCall(QualifiedName, Vec<ExpressionNode>),
-    BinaryExpression(Operand, Box<ExpressionNode>, Box<ExpressionNode>),
-    UnaryExpression(UnaryOperand, Box<ExpressionNode>),
-}
-
-pub type ExpressionNode = Locatable<Expression>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ForLoopNode {
-    pub variable_name: QNameNode,
-    pub lower_bound: ExpressionNode,
-    pub upper_bound: ExpressionNode,
-    pub step: Option<ExpressionNode>,
-    pub statements: StatementNodes,
-    pub next_counter: Option<QNameNode>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ConditionalBlockNode {
-    pub condition: ExpressionNode,
-    pub statements: StatementNodes,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IfBlockNode {
-    pub if_block: ConditionalBlockNode,
-    pub else_if_blocks: Vec<ConditionalBlockNode>,
-    pub else_block: Option<StatementNodes>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Statement {
-    SubCall(BareName, Vec<ExpressionNode>),
-    ForLoop(ForLoopNode),
-    IfBlock(IfBlockNode),
-    Assignment(QualifiedName, ExpressionNode),
-    While(ConditionalBlockNode),
-    Const(QNameNode, ExpressionNode),
-    ErrorHandler(CaseInsensitiveString),
-    Label(CaseInsensitiveString),
-    GoTo(CaseInsensitiveString),
-    SetReturnValue(ExpressionNode),
-}
-
-pub type StatementNode = Locatable<Statement>;
-pub type StatementNodes = Vec<StatementNode>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum TopLevelToken {
-    /// A function implementation
-    FunctionImplementation(QNameNode, Vec<QNameNode>, StatementNodes),
-
-    /// A simple or compound statement
-    Statement(Statement),
-
-    /// A sub implementation
-    SubImplementation(BareNameNode, Vec<QNameNode>, StatementNodes),
-}
-
-pub type TopLevelTokenNode = Locatable<TopLevelToken>;
-pub type ProgramNode = Vec<TopLevelTokenNode>;
-
 pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode> {
     let mut linter = Linter::default();
+    let (f_c, s_c) = collect_subprograms(&program)?;
+    linter.functions = f_c;
+    linter.subs = s_c;
     linter.convert(program)
 }
 
 impl Converter<parser::ProgramNode, ProgramNode> for Linter {
     fn convert(&mut self, a: parser::ProgramNode) -> Result<ProgramNode> {
-        let (f, s) = collect_subprograms(&a)?;
-        self.functions = f;
-        self.subs = s;
-
         let mut result: Vec<TopLevelTokenNode> = vec![];
         for top_level_token_node in a.into_iter() {
             // will contain None where DefInt and declarations used to be
@@ -614,8 +224,10 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
             }
         }
 
-        NoDynamicConst::no_dynamic_const(&result)?;
-        ForNextCounterMatch::for_next_counter_match(&result)?;
+        let n_d_c = super::no_dynamic_const::NoDynamicConst {};
+        n_d_c.visit_program(&result)?;
+        let f_n_c_m = super::for_next_counter_match::ForNextCounterMatch {};
+        f_n_c_m.visit_program(&result)?;
 
         Ok(result)
     }
@@ -650,11 +262,11 @@ impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
                 for q_n_n in mapped_params.iter() {
                     self.context.variables.insert(q_n_n.bare_name().clone());
                 }
-                let mapped = TopLevelToken::FunctionImplementation(
-                    mapped_name,
-                    mapped_params,
-                    self.convert(block)?,
-                );
+                let mapped = TopLevelToken::FunctionImplementation(FunctionImplementation {
+                    name: mapped_name,
+                    params: mapped_params,
+                    body: self.convert(block)?,
+                });
                 self.pop_context();
                 Ok(Some(mapped))
             }
@@ -664,8 +276,11 @@ impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
                 for q_n_n in mapped_params.iter() {
                     self.context.variables.insert(q_n_n.bare_name().clone());
                 }
-                let mapped =
-                    TopLevelToken::SubImplementation(n, mapped_params, self.convert(block)?);
+                let mapped = TopLevelToken::SubImplementation(SubImplementation {
+                    name: n,
+                    params: mapped_params,
+                    body: self.convert(block)?,
+                });
                 self.pop_context();
                 Ok(Some(mapped))
             }
@@ -805,7 +420,7 @@ impl Converter<parser::Expression, Expression> for Linter {
                 ))
             }
             parser::Expression::BinaryExpression(op, l, r) => {
-                // types match?
+                // TODO types match?
                 Ok(Expression::BinaryExpression(
                     op,
                     self.convert(l)?,
@@ -813,7 +428,7 @@ impl Converter<parser::Expression, Expression> for Linter {
                 ))
             }
             parser::Expression::UnaryExpression(op, c) => {
-                // is it a legal op? e.g. -"hello" isn't
+                // TODO is it a legal op? e.g. -"hello" isn't
                 Ok(Expression::UnaryExpression(op, self.convert(c)?))
             }
         }
@@ -849,160 +464,5 @@ impl Converter<parser::IfBlockNode, IfBlockNode> for Linter {
             else_if_blocks: self.convert(a.else_if_blocks)?,
             else_block: self.convert(a.else_block)?,
         })
-    }
-}
-
-pub trait NoDynamicConst {
-    fn no_dynamic_const(node: &Self) -> Result<()>;
-}
-
-impl<T: std::fmt::Debug + Sized + NoDynamicConst> NoDynamicConst for Locatable<T> {
-    fn no_dynamic_const(node: &Self) -> Result<()> {
-        T::no_dynamic_const(node.as_ref()).map_err(|e| e.at_non_zero_location(node.location()))
-    }
-}
-
-impl<T: std::fmt::Debug + Sized + NoDynamicConst> NoDynamicConst for Vec<T> {
-    fn no_dynamic_const(block: &Self) -> Result<()> {
-        for statement in block {
-            T::no_dynamic_const(statement)?;
-        }
-        Ok(())
-    }
-}
-
-impl NoDynamicConst for TopLevelToken {
-    fn no_dynamic_const(top_level_token: &Self) -> Result<()> {
-        match top_level_token {
-            TopLevelToken::Statement(s) => Statement::no_dynamic_const(s),
-            TopLevelToken::FunctionImplementation(_, _, b) => StatementNodes::no_dynamic_const(b),
-            TopLevelToken::SubImplementation(_, _, b) => StatementNodes::no_dynamic_const(b),
-        }
-    }
-}
-
-impl NoDynamicConst for Statement {
-    fn no_dynamic_const(statement: &Self) -> Result<()> {
-        match statement {
-            Self::ForLoop(f) => StatementNodes::no_dynamic_const(&f.statements),
-            Self::IfBlock(i) => {
-                ConditionalBlockNode::no_dynamic_const(&i.if_block)?;
-                for else_if_block in &i.else_if_blocks {
-                    ConditionalBlockNode::no_dynamic_const(&else_if_block)?;
-                }
-                match &i.else_block {
-                    Some(x) => StatementNodes::no_dynamic_const(x),
-                    None => Ok(()),
-                }
-            }
-            Self::While(w) => ConditionalBlockNode::no_dynamic_const(w),
-            Self::Const(_, right) => ExpressionNode::no_dynamic_const(right),
-            _ => Ok(()),
-        }
-    }
-}
-
-impl NoDynamicConst for ConditionalBlockNode {
-    fn no_dynamic_const(e: &Self) -> Result<()> {
-        StatementNodes::no_dynamic_const(&e.statements)
-    }
-}
-
-impl NoDynamicConst for ExpressionNode {
-    fn no_dynamic_const(e_node: &Self) -> Result<()> {
-        let e: &Expression = e_node.as_ref();
-        match e {
-            Expression::FunctionCall(_, _) | Expression::Variable(_) => {
-                err("Invalid constant", e_node.location())
-            }
-            Expression::BinaryExpression(_, left, right) => {
-                let unboxed_left: &Self = left;
-                let unboxed_right: &Self = right;
-                Self::no_dynamic_const(unboxed_left)?;
-                Self::no_dynamic_const(unboxed_right)
-            }
-            Expression::UnaryExpression(_, child) => {
-                let unboxed_child: &Self = child;
-                Self::no_dynamic_const(unboxed_child)
-            }
-            _ => Ok(()),
-        }
-    }
-}
-
-pub trait ForNextCounterMatch {
-    fn for_next_counter_match(node: &Self) -> Result<()>;
-}
-
-impl<T: std::fmt::Debug + Sized + ForNextCounterMatch> ForNextCounterMatch for Locatable<T> {
-    fn for_next_counter_match(node: &Self) -> Result<()> {
-        T::for_next_counter_match(node.as_ref())
-            .map_err(|e| e.at_non_zero_location(node.location()))
-    }
-}
-
-impl<T: std::fmt::Debug + Sized + ForNextCounterMatch> ForNextCounterMatch for Vec<T> {
-    fn for_next_counter_match(block: &Self) -> Result<()> {
-        for statement in block {
-            T::for_next_counter_match(statement)?;
-        }
-        Ok(())
-    }
-}
-
-impl ForNextCounterMatch for TopLevelToken {
-    fn for_next_counter_match(top_level_token: &Self) -> Result<()> {
-        match top_level_token {
-            TopLevelToken::Statement(s) => Statement::for_next_counter_match(s),
-            TopLevelToken::FunctionImplementation(_, _, b) => {
-                StatementNodes::for_next_counter_match(b)
-            }
-            TopLevelToken::SubImplementation(_, _, b) => StatementNodes::for_next_counter_match(b),
-        }
-    }
-}
-
-impl ForNextCounterMatch for Statement {
-    fn for_next_counter_match(statement: &Self) -> Result<()> {
-        match statement {
-            Self::ForLoop(f) => ForLoopNode::for_next_counter_match(f),
-            Self::IfBlock(i) => {
-                ConditionalBlockNode::for_next_counter_match(&i.if_block)?;
-                for else_if_block in &i.else_if_blocks {
-                    ConditionalBlockNode::for_next_counter_match(&else_if_block)?;
-                }
-                match &i.else_block {
-                    Some(x) => StatementNodes::for_next_counter_match(x),
-                    None => Ok(()),
-                }
-            }
-            Self::While(w) => ConditionalBlockNode::for_next_counter_match(w),
-            _ => Ok(()),
-        }
-    }
-}
-
-impl ForNextCounterMatch for ForLoopNode {
-    fn for_next_counter_match(f: &Self) -> Result<()> {
-        StatementNodes::for_next_counter_match(&f.statements)?;
-
-        // for and next counters must match
-        match &f.next_counter {
-            Some(n) => {
-                let next_var_name: &QualifiedName = n.as_ref();
-                if next_var_name == f.variable_name.as_ref() {
-                    Ok(())
-                } else {
-                    err("NEXT without FOR", n.location())
-                }
-            }
-            None => Ok(()),
-        }
-    }
-}
-
-impl ForNextCounterMatch for ConditionalBlockNode {
-    fn for_next_counter_match(c: &Self) -> Result<()> {
-        StatementNodes::for_next_counter_match(&c.statements)
     }
 }

@@ -13,11 +13,11 @@ pub fn resolve(program: ProgramNode) -> Result<(ProgramNode, FunctionContext, Su
     for top_level_token_node in program {
         let (top_level_token, pos) = top_level_token_node.consume();
         match top_level_token {
-            TopLevelToken::FunctionImplementation(f_name, f_params, f_body) => {
-                function_context.add_implementation(f_name, f_params, f_body, pos)?;
+            TopLevelToken::FunctionImplementation(f) => {
+                function_context.add_implementation(f.name, f.params, f.body, pos)?;
             }
-            TopLevelToken::SubImplementation(s_name, s_params, s_body) => {
-                sub_context.add_implementation(s_name, s_params, s_body, pos)?;
+            TopLevelToken::SubImplementation(s) => {
+                sub_context.add_implementation(s.name, s.params, s.body, pos)?;
             }
             _ => reduced_program.push(top_level_token.at(pos)),
         }
