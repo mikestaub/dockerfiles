@@ -15,34 +15,15 @@ impl InstructionGenerator {
         } else {
             let pos = function_name.location();
             let bare_name: &CaseInsensitiveString = function_name.bare_name();
-            match self.function_context.get_implementation(bare_name) {
-                Some(function_impl) => {
-                    let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
+            let function_impl = self.function_context.get_implementation(bare_name).unwrap();
+            let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
 
-                    self.generate_push_named_args_instructions(
-                        &function_impl.parameters,
-                        args,
-                        pos,
-                    )?;
-                    self.push(Instruction::PushStack, pos);
+            self.generate_push_named_args_instructions(&function_impl.parameters, args, pos)?;
+            self.push(Instruction::PushStack, pos);
 
-                    let idx = self.instructions.len();
-                    self.push(Instruction::PushRet(idx + 2), pos);
-                    self.push(Instruction::UnresolvedJump(label), pos);
-                    // TODO provide fallback if variant is missing
-                }
-                None => {
-                    // undefined function is okay as long as no parameter is a string
-                    self.generate_built_in_function_call_instructions(
-                        QualifiedName::new(
-                            CaseInsensitiveString::new("_Undefined_".to_string()),
-                            TypeQualifier::PercentInteger,
-                        )
-                        .at(pos),
-                        args,
-                    )?;
-                }
-            }
+            let idx = self.instructions.len();
+            self.push(Instruction::PushRet(idx + 2), pos);
+            self.push(Instruction::UnresolvedJump(label), pos);
         }
         self.push(Instruction::PopStack, pos);
         self.push(Instruction::CopyResultToA, pos);

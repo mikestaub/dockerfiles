@@ -17,12 +17,6 @@ impl<S: Stdlib> Interpreter<S> {
                 }
                 _ => panic!("Type mismatch at ENVIRON$",),
             }
-        } else if function_name == &QualifiedName::new("_Undefined_", TypeQualifier::PercentInteger)
-        {
-            // TODO remove _Undefined_ function
-            self.context_mut()
-                .demand_sub()
-                .set_function_result(Variant::VInteger(0));
         } else {
             panic!("Unknown function {:?}", function_name);
         }

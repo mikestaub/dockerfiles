@@ -50,7 +50,7 @@ impl<'a> UserDefinedFunctionLinter<'a> {
             }
         }
 
-        // TODO convert function call expression to literal zero
+        // is converted to a literal 0 in undefined_function_reducer
         Ok(())
     }
 }

@@ -9,6 +9,7 @@
 // Mission: remove the need for TypeResolver in Interpreter
 
 use super::error::*;
+use super::expression_reducer::ExpressionReducer;
 use super::post_conversion_linter::PostConversionLinter;
 use super::subprogram_context::{collect_subprograms, FunctionMap, SubMap};
 use super::types::*;
@@ -199,6 +200,11 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
 
         let linter = super::user_defined_sub_linter::UserDefinedSubLinter { subs: &self.subs };
         linter.visit_program(&result)?;
+
+        let reducer = super::undefined_function_reducer::UndefinedFunctionReducer {
+            functions: &self.functions,
+        };
+        result = reducer.visit_program(result)?;
 
         Ok(result)
     }
