@@ -6,6 +6,10 @@ use crate::parser::TypeQualifier;
 
 pub struct BuiltInSubLinter;
 
+pub fn is_built_in_sub(sub_name: &CaseInsensitiveString) -> bool {
+    sub_name == "ENVIRON" || sub_name == "PRINT" || sub_name == "INPUT" || sub_name == "SYSTEM"
+}
+
 impl PostConversionLinter for BuiltInSubLinter {
     fn visit_sub_call(&self, n: &CaseInsensitiveString, args: &Vec<ExpressionNode>) -> Result<()> {
         if n == "SYSTEM" {

@@ -15,9 +15,8 @@ pub struct InstructionGenerator {
 }
 
 fn sanitize(original_program: ProgramNode) -> Result<(ProgramNode, FunctionContext, SubContext)> {
+    // TODO convert to a different return type, not ProgramNode
     let (program, f_c, s_c) = subprogram_resolver::resolve(original_program)?;
-    subprogram_resolver::AllSubsKnown::all_subs_known(&program, &s_c)?;
-    subprogram_resolver::AllFunctionsKnown::all_functions_known(&program, &f_c)?;
     Ok((program, f_c, s_c))
 }
 

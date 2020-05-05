@@ -147,22 +147,17 @@ impl Stdlib for MockStdlib {
 }
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn get_variable_str(&self, name: &str) -> Result<Variant> {
+    pub fn get_variable_str(&self, name: &str) -> Variant {
         let q_name = QualifiedName::try_from(name).unwrap();
         let pos = Location::start();
-        self.context_ref()
-            .get_r_value(&q_name.at(pos))
-            .map(|x| x.unwrap())
+        self.context_ref().get_r_value(&q_name.at(pos)).unwrap()
     }
 }
 
 #[macro_export]
 macro_rules! assert_has_variable {
     ($int:expr, $name:expr, $expected_value:expr) => {
-        assert_eq!(
-            $int.get_variable_str($name).unwrap(),
-            Variant::from($expected_value)
-        );
+        assert_eq!($int.get_variable_str($name), Variant::from($expected_value));
     };
 }
 
@@ -206,11 +201,7 @@ impl AssignmentBuilder {
             let q_name = QualifiedName::try_from(self.qualified_variable.as_ref()).unwrap();
             let q_node = q_name.at(Location::start());
             assert_eq!(
-                interpreter
-                    .context_ref()
-                    .get_r_value(&q_node)
-                    .unwrap()
-                    .unwrap(),
+                interpreter.context_ref().get_r_value(&q_node).unwrap(),
                 Variant::from(expected_value)
             );
         }

@@ -7,7 +7,11 @@ mod no_dynamic_const;
 mod post_conversion_linter;
 mod subprogram_context;
 mod types;
+mod user_defined_function_linter;
+mod user_defined_sub_linter;
 
+pub use self::built_in_function_linter::is_built_in_function;
+pub use self::built_in_sub_linter::is_built_in_sub;
 pub use self::error::Error;
 pub use self::linter::*;
 pub use self::types::*;

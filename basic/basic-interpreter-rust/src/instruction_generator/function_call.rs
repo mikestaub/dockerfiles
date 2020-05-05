@@ -1,4 +1,3 @@
-use super::built_in_functions::is_built_in_function;
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
 use crate::linter::*;

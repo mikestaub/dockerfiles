@@ -182,11 +182,22 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
 
         let linter = super::no_dynamic_const::NoDynamicConst {};
         linter.visit_program(&result)?;
+
         let linter = super::for_next_counter_match::ForNextCounterMatch {};
         linter.visit_program(&result)?;
+
         let linter = super::built_in_function_linter::BuiltInFunctionLinter {};
         linter.visit_program(&result)?;
+
         let linter = super::built_in_sub_linter::BuiltInSubLinter {};
+        linter.visit_program(&result)?;
+
+        let linter = super::user_defined_function_linter::UserDefinedFunctionLinter {
+            functions: &self.functions,
+        };
+        linter.visit_program(&result)?;
+
+        let linter = super::user_defined_sub_linter::UserDefinedSubLinter { subs: &self.subs };
         linter.visit_program(&result)?;
 
         Ok(result)

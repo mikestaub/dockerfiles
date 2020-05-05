@@ -2,10 +2,6 @@ use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
 use crate::linter::{ExpressionNode, QNameNode, QualifiedName, TypeQualifier};
 
-pub fn is_built_in_function(function_name: &QualifiedName) -> bool {
-    function_name == &QualifiedName::new("ENVIRON", TypeQualifier::DollarString)
-}
-
 impl InstructionGenerator {
     pub fn generate_built_in_function_call_instructions(
         &mut self,

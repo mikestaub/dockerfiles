@@ -7,6 +7,10 @@ use std::convert::TryFrom;
 
 pub struct BuiltInFunctionLinter;
 
+pub fn is_built_in_function(function_name: &QualifiedName) -> bool {
+    function_name == &QualifiedName::new("ENVIRON", TypeQualifier::DollarString)
+}
+
 impl BuiltInFunctionLinter {
     fn visit_function(&self, name: &QualifiedName, args: &Vec<ExpressionNode>) -> Result<()> {
         if name == &QualifiedName::try_from("ENVIRON$").unwrap() {

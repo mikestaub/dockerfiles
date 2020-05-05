@@ -5,45 +5,24 @@ use crate::linter::{QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
 impl<S: Stdlib> Interpreter<S> {
-    pub fn run_built_in_function(
-        &mut self,
-        function_name: &QualifiedName,
-        pos: Location,
-    ) -> Result<()> {
+    pub fn run_built_in_function(&mut self, function_name: &QualifiedName, pos: Location) -> () {
         if function_name == &QualifiedName::new("ENVIRON", TypeQualifier::DollarString) {
-            let v = self.context_mut().demand_sub().pop_front_unnamed(pos)?;
+            let v = self.context_mut().demand_sub().pop_front_unnamed(pos);
             match v {
                 Variant::VString(env_var_name) => {
                     let result = self.stdlib.get_env_var(&env_var_name);
                     self.context_mut()
                         .demand_sub()
                         .set_function_result(Variant::VString(result));
-                    Ok(())
                 }
-                _ => Err(InterpreterError::new_with_pos(
-                    "Type mismatch at ENVIRON$",
-                    pos,
-                )),
+                _ => panic!("Type mismatch at ENVIRON$",),
             }
         } else if function_name == &QualifiedName::new("_Undefined_", TypeQualifier::PercentInteger)
         {
-            loop {
-                match self.context_mut().demand_sub().try_pop_front_unnamed(pos)? {
-                    Some(v) => match v {
-                        Variant::VString(_) => {
-                            return Err(InterpreterError::new_with_pos("Type mismatch", pos));
-                        }
-                        _ => (),
-                    },
-                    None => {
-                        break;
-                    }
-                }
-            }
+            // TODO remove _Undefined_ function
             self.context_mut()
                 .demand_sub()
                 .set_function_result(Variant::VInteger(0));
-            Ok(())
         } else {
             panic!("Unknown function {:?}", function_name);
         }

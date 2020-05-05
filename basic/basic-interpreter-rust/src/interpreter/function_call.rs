@@ -69,11 +69,7 @@ mod tests {
         let program = "
         X = Add(\"1\", \"2\")
         ";
-        assert_eq!(
-            interpret_err(program),
-            // TODO 13 should be 17 with an additional linter
-            InterpreterError::new_with_pos("Type mismatch", Location::new(2, 13))
-        );
+        assert_linter_err!(program, "Argument type mismatch", 2, 17);
     }
 
     #[test]

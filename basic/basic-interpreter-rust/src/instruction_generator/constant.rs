@@ -8,7 +8,7 @@ impl InstructionGenerator {
         right: ExpressionNode,
     ) -> Result<()> {
         let (qualified_name, pos) = left.consume();
-        self.generate_const_expression_instructions(right)?;
+        self.generate_expression_instructions(right)?;
         self.push(Instruction::StoreConst(qualified_name), pos);
         Ok(())
     }

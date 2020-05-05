@@ -217,7 +217,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::CopyVarToA(n) => {
                 let name_node = n.clone().at(pos);
-                match self.context_ref().get_r_value(&name_node)? {
+                match self.context_ref().get_r_value(&name_node) {
                     Some(v) => self.set_a(v),
                     None => panic!("Variable {} undefined at {:?}", n, pos),
                 }
@@ -281,7 +281,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::PushUnnamedRefParam(name) => {
                 self.context_mut()
                     .demand_args()
-                    .push_back_unnamed_ref_parameter(&name.clone().at(pos))?;
+                    .push_back_unnamed_ref_parameter(&name.clone().at(pos));
             }
             Instruction::PushUnnamedValParam => {
                 let v = self.get_a();
@@ -293,7 +293,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::SetNamedRefParam(param_q_name, ref_name) => {
                 self.context_mut()
                     .demand_args()
-                    .set_named_ref_parameter(param_q_name, &ref_name.clone().at(pos))?;
+                    .set_named_ref_parameter(param_q_name, &ref_name.clone().at(pos));
             }
             Instruction::SetNamedValParam(param_q_name) => {
                 let v = self.get_a();
@@ -306,7 +306,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 self.run_built_in_sub(n, pos)?;
             }
             Instruction::BuiltInFunction(n) => {
-                self.run_built_in_function(n, pos)?;
+                self.run_built_in_function(n, pos);
             }
             Instruction::UnresolvedJump(_) | Instruction::UnresolvedJumpIfFalse(_) => {
                 panic!("Unresolved label {:?} at {:?}", instruction, pos)

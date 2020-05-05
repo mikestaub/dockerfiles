@@ -10,7 +10,7 @@ impl<S: Stdlib> Interpreter<S> {
         if name == "PRINT" {
             let mut print_args: Vec<String> = vec![];
             loop {
-                match self.context_mut().demand_sub().try_pop_front_unnamed(pos)? {
+                match self.context_mut().demand_sub().try_pop_front_unnamed(pos) {
                     Some(v) => print_args.push(v.to_string()),
                     None => {
                         break;
@@ -36,7 +36,7 @@ impl<S: Stdlib> Interpreter<S> {
         match self
             .context_mut()
             .demand_sub()
-            .pop_front_unnamed(sub_name_node.location())?
+            .pop_front_unnamed(sub_name_node.location())
         {
             Variant::VString(arg_string_value) => {
                 let parts: Vec<&str> = arg_string_value.split("=").collect();
