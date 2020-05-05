@@ -14,7 +14,7 @@ mod user_defined_sub_linter;
 
 pub use self::built_in_function_linter::is_built_in_function;
 pub use self::built_in_sub_linter::is_built_in_sub;
-pub use self::error::Error;
+pub use self::error::{Error, LinterError};
 pub use self::linter::*;
 pub use self::types::*;
 

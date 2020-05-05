@@ -4,20 +4,20 @@ use crate::common::*;
 use crate::parser::QualifiedName;
 
 pub trait ExpressionReducer {
-    fn visit_program(&self, p: ProgramNode) -> Result<ProgramNode> {
+    fn visit_program(&self, p: ProgramNode) -> Result<ProgramNode, Error> {
         p.into_iter()
             .map(|t| self.visit_top_level_token_node(t))
             .collect()
     }
 
-    fn visit_top_level_token_node(&self, t: TopLevelTokenNode) -> Result<TopLevelTokenNode> {
+    fn visit_top_level_token_node(&self, t: TopLevelTokenNode) -> Result<TopLevelTokenNode, Error> {
         let (top_level_token, pos) = t.consume();
         self.visit_top_level_token(top_level_token)
-            .map(|t| t.at(pos))
-            .map_err(|e| e.at_non_zero_location(pos))
+            .with_pos(pos)
+            .with_err_pos(pos)
     }
 
-    fn visit_top_level_token(&self, t: TopLevelToken) -> Result<TopLevelToken> {
+    fn visit_top_level_token(&self, t: TopLevelToken) -> Result<TopLevelToken, Error> {
         match t {
             TopLevelToken::FunctionImplementation(f) => self
                 .visit_function_implementation(f)
@@ -34,7 +34,7 @@ pub trait ExpressionReducer {
     fn visit_function_implementation(
         &self,
         f: FunctionImplementation,
-    ) -> Result<FunctionImplementation> {
+    ) -> Result<FunctionImplementation, Error> {
         Ok(FunctionImplementation {
             name: f.name,
             params: f.params,
@@ -42,7 +42,7 @@ pub trait ExpressionReducer {
         })
     }
 
-    fn visit_sub_implementation(&self, s: SubImplementation) -> Result<SubImplementation> {
+    fn visit_sub_implementation(&self, s: SubImplementation) -> Result<SubImplementation, Error> {
         Ok(SubImplementation {
             name: s.name,
             params: s.params,
@@ -50,20 +50,20 @@ pub trait ExpressionReducer {
         })
     }
 
-    fn visit_statement_nodes(&self, s: StatementNodes) -> Result<StatementNodes> {
+    fn visit_statement_nodes(&self, s: StatementNodes) -> Result<StatementNodes, Error> {
         s.into_iter()
             .map(|x| self.visit_statement_node(x))
             .collect()
     }
 
-    fn visit_statement_node(&self, t: StatementNode) -> Result<StatementNode> {
+    fn visit_statement_node(&self, t: StatementNode) -> Result<StatementNode, Error> {
         let (statement, pos) = t.consume();
         self.visit_statement(statement)
-            .map(|x| x.at(pos))
-            .map_err(|e| e.at_non_zero_location(pos))
+            .with_pos(pos)
+            .with_err_pos(pos)
     }
 
-    fn visit_statement(&self, s: Statement) -> Result<Statement> {
+    fn visit_statement(&self, s: Statement) -> Result<Statement, Error> {
         match s {
             Statement::SubCall(b, e) => self
                 .visit_sub_call(b, e)
@@ -93,11 +93,11 @@ pub trait ExpressionReducer {
         &self,
         name: CaseInsensitiveString,
         args: Vec<ExpressionNode>,
-    ) -> Result<(CaseInsensitiveString, Vec<ExpressionNode>)> {
+    ) -> Result<(CaseInsensitiveString, Vec<ExpressionNode>), Error> {
         let r_args: Vec<ExpressionNode> = args
             .into_iter()
             .map(|e| self.visit_expression_node(e))
-            .collect::<Result<Vec<ExpressionNode>>>()?;
+            .collect::<Result<Vec<ExpressionNode>, Error>>()?;
         Ok((name, r_args))
     }
 
@@ -105,11 +105,11 @@ pub trait ExpressionReducer {
         &self,
         name: QualifiedName,
         v: ExpressionNode,
-    ) -> Result<(QualifiedName, ExpressionNode)> {
+    ) -> Result<(QualifiedName, ExpressionNode), Error> {
         Ok((name, self.visit_expression_node(v)?))
     }
 
-    fn visit_for_loop(&self, f: ForLoopNode) -> Result<ForLoopNode> {
+    fn visit_for_loop(&self, f: ForLoopNode) -> Result<ForLoopNode, Error> {
         let lower_bound = self.visit_expression_node(f.lower_bound)?;
         let upper_bound = self.visit_expression_node(f.upper_bound)?;
         let step = match f.step {
@@ -127,13 +127,13 @@ pub trait ExpressionReducer {
         })
     }
 
-    fn visit_if_block(&self, i: IfBlockNode) -> Result<IfBlockNode> {
+    fn visit_if_block(&self, i: IfBlockNode) -> Result<IfBlockNode, Error> {
         let if_block = self.visit_conditional_block(i.if_block)?;
         let else_if_blocks: Vec<ConditionalBlockNode> = i
             .else_if_blocks
             .into_iter()
             .map(|x| self.visit_conditional_block(x))
-            .collect::<Result<Vec<ConditionalBlockNode>>>()?;
+            .collect::<Result<Vec<ConditionalBlockNode>, Error>>()?;
         let else_block: Option<StatementNodes> = match i.else_block {
             Some(x) => Some(self.visit_statement_nodes(x)?),
             None => None,
@@ -145,7 +145,10 @@ pub trait ExpressionReducer {
         })
     }
 
-    fn visit_conditional_block(&self, c: ConditionalBlockNode) -> Result<ConditionalBlockNode> {
+    fn visit_conditional_block(
+        &self,
+        c: ConditionalBlockNode,
+    ) -> Result<ConditionalBlockNode, Error> {
         Ok(ConditionalBlockNode {
             condition: self.visit_expression_node(c.condition)?,
             statements: self.visit_statement_nodes(c.statements)?,
@@ -156,18 +159,16 @@ pub trait ExpressionReducer {
         &self,
         left: QNameNode,
         right: ExpressionNode,
-    ) -> Result<(QNameNode, ExpressionNode)> {
+    ) -> Result<(QNameNode, ExpressionNode), Error> {
         Ok((left, self.visit_expression_node(right)?))
     }
 
-    fn visit_expression_node(&self, expr_node: ExpressionNode) -> Result<ExpressionNode> {
+    fn visit_expression_node(&self, expr_node: ExpressionNode) -> Result<ExpressionNode, Error> {
         let (expr, pos) = expr_node.consume();
-        self.visit_expression(expr)
-            .map(|x| x.at(pos))
-            .map_err(|x| x.at_non_zero_location(pos))
+        self.visit_expression(expr).with_pos(pos).with_err_pos(pos)
     }
 
-    fn visit_expression(&self, expression: Expression) -> Result<Expression> {
+    fn visit_expression(&self, expression: Expression) -> Result<Expression, Error> {
         Ok(expression)
     }
 }

@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet};
 //
 
 trait Converter<A, B> {
-    fn convert(&mut self, a: A) -> Result<B>;
+    fn convert(&mut self, a: A) -> Result<B, Error>;
 }
 
 // blanket for Vec
@@ -32,7 +32,7 @@ impl<T, A, B> Converter<Vec<A>, Vec<B>> for T
 where
     T: Converter<A, B>,
 {
-    fn convert(&mut self, a: Vec<A>) -> Result<Vec<B>> {
+    fn convert(&mut self, a: Vec<A>) -> Result<Vec<B>, Error> {
         a.into_iter().map(|x| self.convert(x)).collect()
     }
 }
@@ -42,7 +42,7 @@ impl<T, A, B> Converter<Option<A>, Option<B>> for T
 where
     T: Converter<A, B>,
 {
-    fn convert(&mut self, a: Option<A>) -> Result<Option<B>> {
+    fn convert(&mut self, a: Option<A>) -> Result<Option<B>, Error> {
         match a {
             Some(x) => self.convert(x).map(|r| Some(r)),
             None => Ok(None),
@@ -55,7 +55,7 @@ impl<T, A, B> Converter<Box<A>, Box<B>> for T
 where
     T: Converter<A, B>,
 {
-    fn convert(&mut self, a: Box<A>) -> Result<Box<B>> {
+    fn convert(&mut self, a: Box<A>) -> Result<Box<B>, Error> {
         let unboxed_a: A = *a;
         self.convert(unboxed_a).map(|unboxed_b| Box::new(unboxed_b))
     }
@@ -68,11 +68,9 @@ where
     B: std::fmt::Debug + Sized,
     T: Converter<A, B>,
 {
-    fn convert(&mut self, a: Locatable<A>) -> Result<Locatable<B>> {
+    fn convert(&mut self, a: Locatable<A>) -> Result<Locatable<B>, Error> {
         let (element, pos) = a.consume();
-        self.convert(element)
-            .map(|x| x.at(pos))
-            .map_err(|e| e.at_non_zero_location(pos))
+        self.convert(element).with_pos(pos).with_err_pos(pos)
     }
 }
 
@@ -90,7 +88,7 @@ struct LinterContext {
 }
 
 impl LinterContext {
-    pub fn get_constant_type(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
+    pub fn get_constant_type(&self, n: &parser::Name) -> Result<Option<TypeQualifier>, Error> {
         let bare_name: &CaseInsensitiveString = n.bare_name();
         match self.constants.get(bare_name) {
             Some(const_type) => {
@@ -98,14 +96,17 @@ impl LinterContext {
                 if n.bare_or_eq(*const_type) {
                     Ok(Some(*const_type))
                 } else {
-                    err("Duplicate definition", Location::zero())
+                    Err(LinterError::DuplicateDefinition.into())
                 }
             }
             None => Ok(None),
         }
     }
 
-    pub fn get_parent_constant_type(&self, n: &parser::Name) -> Result<Option<TypeQualifier>> {
+    pub fn get_parent_constant_type(
+        &self,
+        n: &parser::Name,
+    ) -> Result<Option<TypeQualifier>, Error> {
         match &self.parent {
             Some(p) => {
                 let x = p.get_constant_type(n)?;
@@ -155,7 +156,7 @@ impl Linter {
     }
 }
 
-pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode> {
+pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode, Error> {
     let mut linter = Linter::default();
     let (f_c, s_c) = collect_subprograms(&program)?;
     linter.functions = f_c;
@@ -164,14 +165,12 @@ pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode> {
 }
 
 impl Converter<parser::ProgramNode, ProgramNode> for Linter {
-    fn convert(&mut self, a: parser::ProgramNode) -> Result<ProgramNode> {
+    fn convert(&mut self, a: parser::ProgramNode) -> Result<ProgramNode, Error> {
         let mut result: Vec<TopLevelTokenNode> = vec![];
         for top_level_token_node in a.into_iter() {
             // will contain None where DefInt and declarations used to be
             let (top_level_token, pos) = top_level_token_node.consume();
-            let opt: Option<TopLevelToken> = self
-                .convert(top_level_token)
-                .map_err(|e| e.at_non_zero_location(pos))?;
+            let opt: Option<TopLevelToken> = self.convert(top_level_token).with_err_pos(pos)?;
             match opt {
                 Some(t) => {
                     let r: TopLevelTokenNode = t.at(pos);
@@ -211,7 +210,7 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
 }
 
 impl Converter<Name, QualifiedName> for Linter {
-    fn convert(&mut self, a: Name) -> Result<QualifiedName> {
+    fn convert(&mut self, a: Name) -> Result<QualifiedName, Error> {
         match a {
             Name::Bare(b) => {
                 let qualifier = self.resolver.resolve(&b);
@@ -224,7 +223,7 @@ impl Converter<Name, QualifiedName> for Linter {
 
 // Option because we filter out DefType
 impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
-    fn convert(&mut self, a: parser::TopLevelToken) -> Result<Option<TopLevelToken>> {
+    fn convert(&mut self, a: parser::TopLevelToken) -> Result<Option<TopLevelToken>, Error> {
         match a {
             parser::TopLevelToken::DefType(d) => {
                 self.resolver.set(&d);
@@ -269,7 +268,7 @@ impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
 }
 
 impl Converter<parser::Statement, Statement> for Linter {
-    fn convert(&mut self, a: parser::Statement) -> Result<Statement> {
+    fn convert(&mut self, a: parser::Statement) -> Result<Statement, Error> {
         match a {
             parser::Statement::SubCall(n, args) => Ok(Statement::SubCall(n, self.convert(args)?)),
             parser::Statement::ForLoop(f) => Ok(Statement::ForLoop(self.convert(f)?)),
@@ -288,7 +287,7 @@ impl Converter<parser::Statement, Statement> for Linter {
                         // TODO check if casting is possible
                         Ok(Statement::SetReturnValue(self.convert(e)?))
                     } else {
-                        err("Duplicate definition", Location::zero())
+                        Err(LinterError::DuplicateDefinition.into())
                     }
                 } else if self
                     .context
@@ -298,11 +297,11 @@ impl Converter<parser::Statement, Statement> for Linter {
                     .unwrap_or_default()
                 {
                     // trying to assign to the sub name should always be an error hopefully
-                    err("Cannot assign to sub", Location::zero())
+                    Err(LinterError::InvalidAssignment.into())
                 } else {
                     if self.context.constants.contains_key(n.bare_name()) {
                         // cannot overwrite local constant
-                        err("Duplicate definition", Location::zero())
+                        Err(LinterError::DuplicateDefinition.into())
                     } else {
                         // TODO check if casting is possible
                         self.context.variables.insert(n.bare_name().clone());
@@ -317,7 +316,7 @@ impl Converter<parser::Statement, Statement> for Linter {
                     || self.context.constants.contains_key(name.bare_name())
                 {
                     // local variable or local constant already present by that name
-                    err("Duplicate definition", pos)
+                    err(LinterError::DuplicateDefinition, pos)
                 } else {
                     let converted_expression_node = self.convert(e)?;
                     let e_type = converted_expression_node.as_ref().try_qualifier()?;
@@ -337,7 +336,7 @@ impl Converter<parser::Statement, Statement> for Linter {
                                     .insert(q.bare_name().clone(), q.qualifier());
                                 Ok(Statement::Const(q.at(pos), converted_expression_node))
                             } else {
-                                err("Type mismatch", converted_expression_node.location())
+                                err_l(LinterError::TypeMismatch, &converted_expression_node)
                             }
                         }
                     }
@@ -351,7 +350,7 @@ impl Converter<parser::Statement, Statement> for Linter {
 }
 
 impl Converter<parser::Expression, Expression> for Linter {
-    fn convert(&mut self, a: parser::Expression) -> Result<Expression> {
+    fn convert(&mut self, a: parser::Expression) -> Result<Expression, Error> {
         match a {
             parser::Expression::SingleLiteral(f) => Ok(Expression::SingleLiteral(f)),
             parser::Expression::DoubleLiteral(f) => Ok(Expression::DoubleLiteral(f)),
@@ -413,7 +412,7 @@ impl Converter<parser::Expression, Expression> for Linter {
 }
 
 impl Converter<parser::ForLoopNode, ForLoopNode> for Linter {
-    fn convert(&mut self, a: parser::ForLoopNode) -> Result<ForLoopNode> {
+    fn convert(&mut self, a: parser::ForLoopNode) -> Result<ForLoopNode, Error> {
         Ok(ForLoopNode {
             variable_name: self.convert(a.variable_name)?,
             lower_bound: self.convert(a.lower_bound)?,
@@ -426,7 +425,7 @@ impl Converter<parser::ForLoopNode, ForLoopNode> for Linter {
 }
 
 impl Converter<parser::ConditionalBlockNode, ConditionalBlockNode> for Linter {
-    fn convert(&mut self, a: parser::ConditionalBlockNode) -> Result<ConditionalBlockNode> {
+    fn convert(&mut self, a: parser::ConditionalBlockNode) -> Result<ConditionalBlockNode, Error> {
         Ok(ConditionalBlockNode {
             condition: self.convert(a.condition)?,
             statements: self.convert(a.statements)?,
@@ -435,7 +434,7 @@ impl Converter<parser::ConditionalBlockNode, ConditionalBlockNode> for Linter {
 }
 
 impl Converter<parser::IfBlockNode, IfBlockNode> for Linter {
-    fn convert(&mut self, a: parser::IfBlockNode) -> Result<IfBlockNode> {
+    fn convert(&mut self, a: parser::IfBlockNode) -> Result<IfBlockNode, Error> {
         Ok(IfBlockNode {
             if_block: self.convert(a.if_block)?,
             else_if_blocks: self.convert(a.else_if_blocks)?,

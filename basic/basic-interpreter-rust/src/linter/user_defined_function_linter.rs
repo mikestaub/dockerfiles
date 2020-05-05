@@ -11,7 +11,11 @@ pub struct UserDefinedFunctionLinter<'a> {
 }
 
 impl<'a> UserDefinedFunctionLinter<'a> {
-    fn visit_function(&self, name: &QualifiedName, args: &Vec<ExpressionNode>) -> Result<()> {
+    fn visit_function(
+        &self,
+        name: &QualifiedName,
+        args: &Vec<ExpressionNode>,
+    ) -> Result<(), Error> {
         if is_built_in_function(name) {
             // TODO somewhere ensure we can't override built-in functions
             Ok(())
@@ -20,16 +24,16 @@ impl<'a> UserDefinedFunctionLinter<'a> {
             match self.functions.get(bare_name) {
                 Some((return_type, param_types, _)) => {
                     if *return_type != name.qualifier() {
-                        err("Type mismatch", Location::zero())
+                        err_no_pos(LinterError::TypeMismatch)
                     } else if args.len() != param_types.len() {
-                        err("Argument count mismatch", Location::zero())
+                        err_no_pos(LinterError::ArgumentCountMismatch)
                     } else {
                         for i in 0..args.len() {
                             let arg_node = args.get(i).unwrap();
                             let arg = arg_node.as_ref();
                             let arg_q = arg.try_qualifier()?;
                             if !arg_q.can_cast_to(param_types[i]) {
-                                return err("Argument type mismatch", arg_node.location());
+                                return err_l(LinterError::ArgumentTypeMismatch, arg_node);
                             }
                         }
                         Ok(())
@@ -40,13 +44,13 @@ impl<'a> UserDefinedFunctionLinter<'a> {
         }
     }
 
-    fn handle_undefined_function(&self, args: &Vec<ExpressionNode>) -> Result<()> {
+    fn handle_undefined_function(&self, args: &Vec<ExpressionNode>) -> Result<(), Error> {
         for i in 0..args.len() {
             let arg_node = args.get(i).unwrap();
             let arg = arg_node.as_ref();
             let arg_q = arg.try_qualifier()?;
             if arg_q == TypeQualifier::DollarString {
-                return err("Argument type mismatch", arg_node.location());
+                return err_l(LinterError::ArgumentTypeMismatch, arg_node);
             }
         }
 
@@ -56,7 +60,7 @@ impl<'a> UserDefinedFunctionLinter<'a> {
 }
 
 impl<'a> PostConversionLinter for UserDefinedFunctionLinter<'a> {
-    fn visit_expression(&self, expr_node: &ExpressionNode) -> Result<()> {
+    fn visit_expression(&self, expr_node: &ExpressionNode) -> Result<(), Error> {
         let pos = expr_node.location();
         let e = expr_node.as_ref();
         match e {
@@ -64,8 +68,7 @@ impl<'a> PostConversionLinter for UserDefinedFunctionLinter<'a> {
                 for x in args {
                     self.visit_expression(x)?;
                 }
-                self.visit_function(n, args)
-                    .map_err(|e| e.at_non_zero_location(pos))
+                self.visit_function(n, args).with_err_pos(pos)
             }
             Expression::BinaryExpression(_, left, right) => {
                 self.visit_expression(left)?;

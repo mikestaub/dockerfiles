@@ -254,12 +254,11 @@ macro_rules! assert_instruction_generator_err {
 #[macro_export]
 macro_rules! assert_linter_err {
     ($program:expr, $expected_msg:expr, $expected_row:expr, $expected_col:expr) => {
+        let (actual_err, actual_pos) = linter_err($program).consume();
+        assert_eq!(actual_err, $expected_msg);
         assert_eq!(
-            linter_err($program),
-            Locatable::new(
-                format!("[L] {}", $expected_msg),
-                Location::new($expected_row, $expected_col)
-            )
+            actual_pos.unwrap(),
+            Location::new($expected_row, $expected_col)
         );
     };
 }

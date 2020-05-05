@@ -30,6 +30,7 @@ mod tests {
     use crate::assert_linter_err;
     use crate::common::*;
     use crate::interpreter::Stdlib;
+    use crate::linter::LinterError;
     use crate::variant::Variant;
 
     #[test]
@@ -47,14 +48,14 @@ mod tests {
 
     #[test]
     fn test_function_call_environ_no_args_linter_err() {
-        assert_linter_err!("X$ = ENVIRON$()", "Argument count mismatch", 1, 6);
+        assert_linter_err!("X$ = ENVIRON$()", LinterError::ArgumentCountMismatch, 1, 6);
     }
 
     #[test]
     fn test_function_call_environ_two_args_linter_err() {
         assert_linter_err!(
             r#"X$ = ENVIRON$("hi", "bye")"#,
-            "Argument count mismatch",
+            LinterError::ArgumentCountMismatch,
             1,
             6
         );
@@ -62,6 +63,11 @@ mod tests {
 
     #[test]
     fn test_function_call_environ_numeric_arg_linter_err() {
-        assert_linter_err!("X$ = ENVIRON$(42)", "Argument type mismatch", 1, 15);
+        assert_linter_err!(
+            "X$ = ENVIRON$(42)",
+            LinterError::ArgumentTypeMismatch,
+            1,
+            15
+        );
     }
 }

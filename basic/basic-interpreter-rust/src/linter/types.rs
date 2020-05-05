@@ -20,7 +20,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn try_qualifier(&self) -> Result<TypeQualifier> {
+    pub fn try_qualifier(&self) -> Result<TypeQualifier, Error> {
         match self {
             Self::SingleLiteral(_) => Ok(TypeQualifier::BangSingle),
             Self::DoubleLiteral(_) => Ok(TypeQualifier::HashDouble),
@@ -41,14 +41,14 @@ impl Expression {
                         }
                     }
                 } else {
-                    err("Type mismatch", r.as_ref().location())
+                    err(LinterError::TypeMismatch, r.as_ref().location())
                 }
             }
             Self::UnaryExpression(_, c) => {
                 let q_child = c.as_ref().as_ref().try_qualifier()?;
                 if q_child == TypeQualifier::DollarString {
                     // no unary operator currently applicable to strings
-                    err("Type mismatch", c.as_ref().location())
+                    err(LinterError::TypeMismatch, c.as_ref().location())
                 } else {
                     Ok(q_child)
                 }

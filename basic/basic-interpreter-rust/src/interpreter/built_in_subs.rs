@@ -1,7 +1,7 @@
 use crate::common::*;
 use crate::interpreter::context::Argument;
 use crate::interpreter::context_owner::ContextOwner;
-use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
+use crate::interpreter::{err, Interpreter, InterpreterError, Result, Stdlib};
 use crate::linter::{HasQualifier, QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
@@ -33,10 +33,7 @@ impl<S: Stdlib> Interpreter<S> {
             Variant::VString(arg_string_value) => {
                 let parts: Vec<&str> = arg_string_value.split("=").collect();
                 if parts.len() != 2 {
-                    Err(InterpreterError::new_with_pos(
-                        "Invalid expression. Must be name=value.",
-                        pos,
-                    ))
+                    err("Invalid expression. Must be name=value.", pos)
                 } else {
                     self.stdlib
                         .set_env_var(parts[0].to_string(), parts[1].to_string());
@@ -55,7 +52,7 @@ impl<S: Stdlib> Interpreter<S> {
                         self.do_input_one_var(a, n, pos)?;
                     }
                     _ => {
-                        return Err(InterpreterError::new_with_pos("Expected variable", pos));
+                        panic!("Expected variable (linter should have caught this)");
                     }
                 },
                 None => {
@@ -112,9 +109,10 @@ mod tests {
     use super::super::test_utils::*;
     use crate::assert_linter_err;
     use crate::common::*;
+    use crate::linter::LinterError;
 
     #[test]
     fn test_sub_call_system_no_args_allowed() {
-        assert_linter_err!("SYSTEM 42", "Argument count mismatch", 1, 1);
+        assert_linter_err!("SYSTEM 42", LinterError::ArgumentCountMismatch, 1, 1);
     }
 }

@@ -14,7 +14,7 @@ impl<'a> PostConversionLinter for UserDefinedSubLinter<'a> {
         &self,
         name: &CaseInsensitiveString,
         args: &Vec<ExpressionNode>,
-    ) -> Result<()> {
+    ) -> Result<(), Error> {
         if is_built_in_sub(name) {
             // TODO somewhere ensure we can't override built-in subs
             Ok(())
@@ -22,20 +22,20 @@ impl<'a> PostConversionLinter for UserDefinedSubLinter<'a> {
             match self.subs.get(name) {
                 Some((param_types, _)) => {
                     if args.len() != param_types.len() {
-                        err("Argument count mismatch", Location::zero())
+                        err_no_pos(LinterError::ArgumentCountMismatch)
                     } else {
                         for i in 0..args.len() {
                             let arg_node = args.get(i).unwrap();
                             let arg = arg_node.as_ref();
                             let arg_q = arg.try_qualifier()?;
                             if !arg_q.can_cast_to(param_types[i]) {
-                                return err("Argument type mismatch", arg_node.location());
+                                return err_l(LinterError::ArgumentTypeMismatch, arg_node);
                             }
                         }
                         Ok(())
                     }
                 }
-                None => err("Subprogram not defined", Location::zero()),
+                None => err_no_pos(LinterError::SubprogramNotDefined),
             }
         }
     }

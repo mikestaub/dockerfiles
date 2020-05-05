@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use crate::common::*;
     use crate::interpreter::test_utils::*;
-    use crate::interpreter::Stdlib;
+    use crate::interpreter::{InterpreterError, Stdlib};
 
     mod input {
         mod unqualified_var {
@@ -135,5 +136,34 @@ mod tests {
         ";
         let interpreter = interpret(program);
         assert_eq!(interpreter.stdlib.output, vec!["1"]);
+    }
+
+    #[test]
+    fn test_stacktrace() {
+        let program = r#"
+        DECLARE SUB Hello(N)
+
+        Hello 1
+
+        SUB Hello(N)
+            If N <= 1 THEN
+                Hello N + 1
+            ELSE
+                Environ "oops"
+            END IF
+        END SUB
+        "#;
+        assert_eq!(
+            interpret_err(program),
+            InterpreterError::new(
+                "Invalid expression. Must be name=value.",
+                vec![
+                    Location::new(10, 17), // "inside" Environ
+                    Location::new(10, 17), // at Environ "oops"
+                    Location::new(8, 17),  // at Hello N + 1
+                    Location::new(4, 9),   // at Hello 1
+                ]
+            )
+        );
     }
 }

@@ -3,6 +3,7 @@ mod tests {
     use super::super::test_utils::*;
     use crate::assert_linter_err;
     use crate::common::*;
+    use crate::linter::LinterError;
 
     mod unqualified_integer_declaration {
         use super::*;
@@ -33,7 +34,7 @@ mod tests {
             CONST X = 42
             PRINT X!
             ";
-            assert_linter_err!(program, "Duplicate definition", 3, 19);
+            assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 19);
         }
 
         #[test]
@@ -43,7 +44,7 @@ mod tests {
             CONST X = 32
             PRINT X
             ";
-            assert_linter_err!(program, "Duplicate definition", 3, 19);
+            assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 19);
         }
 
         #[test]
@@ -53,7 +54,7 @@ mod tests {
             CONST X = 33
             PRINT X
             ";
-            assert_linter_err!(program, "Duplicate definition", 3, 19);
+            assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 19);
         }
     }
 
@@ -86,7 +87,7 @@ mod tests {
             CONST X = 3.14
             X = 6.28
             ";
-            assert_linter_err!(program, "Duplicate definition", 3, 13);
+            assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 13);
         }
     }
 
@@ -147,7 +148,7 @@ mod tests {
             CONST X! = "hello"
             PRINT X!
             "#;
-            assert_linter_err!(program, "Type mismatch", 2, 24);
+            assert_linter_err!(program, LinterError::TypeMismatch, 2, 24);
         }
     }
 
@@ -160,13 +161,12 @@ mod tests {
             CONST X% = "hello"
             PRINT X
             "#;
-            assert_linter_err!(program, "Type mismatch", 2, 24);
+            assert_linter_err!(program, LinterError::TypeMismatch, 2, 24);
         }
     }
 
     mod expressions {
         use super::*;
-        use crate::assert_linter_err;
 
         #[test]
         fn binary_plus() {
@@ -218,7 +218,7 @@ mod tests {
             CONST X = Add(1, 2)
             PRINT X
             "#;
-            assert_linter_err!(program, "Invalid constant", 2, 23);
+            assert_linter_err!(program, LinterError::InvalidConstant, 2, 23);
         }
 
         #[test]
@@ -228,7 +228,7 @@ mod tests {
             CONST A = X + 1
             PRINT A
             "#;
-            assert_linter_err!(program, "Invalid constant", 3, 23);
+            assert_linter_err!(program, LinterError::InvalidConstant, 3, 23);
         }
     }
 

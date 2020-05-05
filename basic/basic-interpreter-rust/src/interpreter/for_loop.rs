@@ -5,6 +5,7 @@ mod tests {
     use crate::assert_linter_err;
     use crate::common::*;
     use crate::interpreter::InterpreterError;
+    use crate::linter::LinterError;
     use crate::variant::Variant;
 
     #[test]
@@ -148,7 +149,7 @@ mod tests {
             PRINT i%
         NEXT i
         ";
-        assert_linter_err!(input, "NEXT without FOR", 4, 14);
+        assert_linter_err!(input, LinterError::NextWithoutFor, 4, 14);
     }
 
     #[test]

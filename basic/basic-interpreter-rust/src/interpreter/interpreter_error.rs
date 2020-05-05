@@ -24,34 +24,25 @@ impl InterpreterError {
         InterpreterError::new(msg, vec![pos])
     }
 
-    // TODO add test with stacktrace demo
-    pub fn merge_pos(self, pos: Location) -> InterpreterError {
-        let mut new_vec = self.stacktrace;
-        new_vec.push(pos);
-        InterpreterError::new(self.message, new_vec)
-    }
-
-    pub fn at_non_zero_location(self, pos: Location) -> Self {
-        if self.stacktrace.is_empty() {
-            InterpreterError::new_with_pos(self.message, pos)
-        } else {
-            if self.stacktrace[self.stacktrace.len() - 1] == Location::zero() {
-                let mut new_stacktrace = Stacktrace::new();
-                for i in 0..self.stacktrace.len() - 1 {
-                    new_stacktrace.push(self.stacktrace[i]);
-                }
-                new_stacktrace.push(pos);
-                Self::new(self.message, new_stacktrace)
-            } else {
-                self
-            }
+    pub fn with_existing_stacktrace(self, stacktrace: &Stacktrace) -> InterpreterError {
+        let mut new_vec = vec![];
+        for x in self.stacktrace {
+            new_vec.push(x);
         }
+        for x in stacktrace.iter() {
+            new_vec.push(*x);
+        }
+        InterpreterError::new(self.message, new_vec)
     }
 
     #[cfg(test)]
     pub fn message(&self) -> &String {
         &self.message
     }
+}
+
+pub fn err<T, S: AsRef<str>>(msg: S, pos: Location) -> Result<T> {
+    Err(InterpreterError::new_with_pos(msg, pos))
 }
 
 #[cfg(test)]

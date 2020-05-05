@@ -4,6 +4,7 @@ mod tests {
     use crate::assert_has_variable;
     use crate::assert_linter_err;
     use crate::common::*;
+    use crate::linter::LinterError;
     use crate::variant::Variant;
 
     #[test]
@@ -25,7 +26,7 @@ mod tests {
         DECLARE FUNCTION Add(A, B)
         X = Add(1, 2)
         ";
-        assert_linter_err!(program, "Subprogram not defined", 2, 9);
+        assert_linter_err!(program, LinterError::SubprogramNotDefined, 2, 9);
     }
 
     #[test]
@@ -68,7 +69,7 @@ mod tests {
         let program = "
         X = Add(\"1\", \"2\")
         ";
-        assert_linter_err!(program, "Argument type mismatch", 2, 17);
+        assert_linter_err!(program, LinterError::ArgumentTypeMismatch, 2, 17);
     }
 
     #[test]

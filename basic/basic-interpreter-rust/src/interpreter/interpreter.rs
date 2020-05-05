@@ -80,6 +80,7 @@ pub struct Interpreter<S: Stdlib> {
     pub context: Option<Context>,
     register_stack: RegisterStack,
     return_stack: Vec<usize>,
+    stacktrace: Vec<Location>,
 }
 
 impl<TStdlib: Stdlib> Interpreter<TStdlib> {
@@ -89,6 +90,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             context: Some(Context::new()),
             return_stack: vec![],
             register_stack: VecDeque::new(),
+            stacktrace: vec![],
         };
         result.register_stack.push_back(Registers::new());
         result
@@ -253,9 +255,11 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::PushStack => {
                 self.swap_args_with_sub_context();
+                self.stacktrace.insert(0, pos);
             }
             Instruction::PopStack => {
                 self.pop();
+                self.stacktrace.remove(0);
             }
             Instruction::PushUnnamedRefParam(name) => {
                 self.context_mut()
@@ -333,7 +337,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                         i = error_idx;
                     }
                     None => {
-                        return Err(e);
+                        return Err(e.with_existing_stacktrace(&self.stacktrace));
                     }
                 },
             }

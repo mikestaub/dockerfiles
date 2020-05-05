@@ -23,10 +23,6 @@ impl Location {
     pub fn start() -> Location {
         Location::new(1, 1)
     }
-
-    pub fn zero() -> Location {
-        Location::new(0, 0)
-    }
 }
 
 // Locatable
@@ -44,14 +40,6 @@ impl<T: std::fmt::Debug + Sized> Locatable<T> {
 
     pub fn consume(self) -> (T, Location) {
         (self.element, self.location)
-    }
-
-    pub fn at_non_zero_location(self, pos: Location) -> Self {
-        if self.location == Location::zero() {
-            Self::new(self.element, pos)
-        } else {
-            self
-        }
     }
 }
 

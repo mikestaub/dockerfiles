@@ -10,7 +10,7 @@ pub struct UndefinedFunctionReducer<'a> {
 }
 
 impl<'a> ExpressionReducer for UndefinedFunctionReducer<'a> {
-    fn visit_expression(&self, expression: Expression) -> Result<Expression> {
+    fn visit_expression(&self, expression: Expression) -> Result<Expression, Error> {
         match expression {
             Expression::BinaryExpression(op, left, right) => {
                 let mapped_left = self.visit_expression_node(*left)?;
@@ -30,7 +30,7 @@ impl<'a> ExpressionReducer for UndefinedFunctionReducer<'a> {
                     let r_args: Vec<ExpressionNode> = args
                         .into_iter()
                         .map(|a| self.visit_expression_node(a))
-                        .collect::<Result<Vec<ExpressionNode>>>()?;
+                        .collect::<Result<Vec<ExpressionNode>, Error>>()?;
                     Ok(Expression::FunctionCall(name, r_args))
                 } else {
                     // the user_defined_function_linter already ensures that the args are valid
