@@ -10,12 +10,9 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 
-// TODO: 1. instructionContext -> emitter
-//       2. fix bug
-//       3. hashmap<?,Hashmap<?>> -> new class / classes in context
-//       4. context enums
-//       5. fix remaining todos
-//       6. rename suprogram_resolver to linter
+// TODO: 1. hashmap<?,Hashmap<?>> -> new class / classes in context
+// TODO: 2. context enums
+// TODO: 3. rename suprogram_resolver to linter
 
 #[derive(Debug)]
 pub struct Registers {
@@ -69,6 +66,10 @@ impl Registers {
 
     pub fn copy_d_to_b(&mut self) {
         self.b = self.d.clone();
+    }
+
+    pub fn swap_a_with_b(&mut self) {
+        std::mem::swap(&mut self.a, &mut self.b);
     }
 }
 
@@ -165,7 +166,9 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::CopyDToB => {
                 self.registers_mut().copy_d_to_b();
             }
-
+            Instruction::SwapAWithB => {
+                self.registers_mut().swap_a_with_b();
+            }
             Instruction::Plus => {
                 let a = self.get_a();
                 let b = self.get_b();
@@ -291,7 +294,9 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::BuiltInFunction(n) => {
                 self.run_built_in_function(n, pos);
             }
-            Instruction::UnresolvedJump(_) | Instruction::UnresolvedJumpIfFalse(_) => {
+            Instruction::UnresolvedJump(_)
+            | Instruction::UnresolvedJumpIfFalse(_)
+            | Instruction::SetUnresolvedErrorHandler(_) => {
                 panic!("Unresolved label {:?} at {:?}", instruction, pos)
             }
             Instruction::Label(_) => (), // no-op
@@ -316,7 +321,6 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::Throw(msg) => {
                 self.throw(msg, pos)?;
             }
-            _ => unimplemented!("{:?}", instruction),
         }
         Ok(())
     }

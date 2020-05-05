@@ -36,7 +36,6 @@ impl InstructionGenerator {
         expressions: Vec<ExpressionNode>,
         pos: Location,
     ) -> Result<()> {
-        // TODO validate arg count and param count match
         // TODO validate cast if by val, same type if by ref
         self.push(Instruction::PreparePush, pos);
         for (n, e_node) in param_names.iter().zip(expressions.into_iter()) {

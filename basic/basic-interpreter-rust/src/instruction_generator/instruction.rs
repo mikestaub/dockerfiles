@@ -16,6 +16,7 @@ pub enum Instruction {
     CopyCToB,
     CopyDToA,
     CopyDToB,
+    SwapAWithB,
     /// Adds registers A and B and stores the results into register A
     Plus,
     Minus,

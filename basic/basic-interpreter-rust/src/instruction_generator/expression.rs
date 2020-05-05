@@ -41,10 +41,11 @@ impl InstructionGenerator {
             }
             Expression::BinaryExpression(op, left, right) => {
                 self.push(Instruction::PushRegisters, pos);
-                // TODO this implies right to left evaluation, double check with QBasic reference implementation
-                self.generate_expression_instructions(*right)?;
-                self.push(Instruction::CopyAToB, pos);
                 self.generate_expression_instructions(*left)?;
+                self.push(Instruction::CopyAToB, pos);
+                self.generate_expression_instructions(*right)?;
+                self.push(Instruction::SwapAWithB, pos);
+
                 match op {
                     Operand::Plus => self.push(Instruction::Plus, pos),
                     Operand::Minus => self.push(Instruction::Minus, pos),

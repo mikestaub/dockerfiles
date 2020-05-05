@@ -58,6 +58,8 @@ pub enum Argument {
 //    Push to stack as variant
 // 7. Get/Set function result
 
+// TODO review how much is needed after linter, run code coverage
+
 fn do_cast(value: Variant, qualifier: TypeQualifier, pos: Location) -> Result<Variant> {
     cast(value, qualifier).map_err(|e| InterpreterError::new_with_pos(e, pos))
 }
