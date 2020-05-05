@@ -3,7 +3,6 @@ mod tests {
     use super::super::test_utils::*;
     use crate::assert_linter_err;
     use crate::common::*;
-    use crate::interpreter::InterpreterError;
 
     mod unqualified_integer_declaration {
         use super::*;

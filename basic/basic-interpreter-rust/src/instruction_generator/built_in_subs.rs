@@ -1,5 +1,4 @@
 use super::{Instruction, InstructionGenerator, Result};
-use crate::common::*;
 use crate::linter::{BareNameNode, ExpressionNode};
 
 impl InstructionGenerator {

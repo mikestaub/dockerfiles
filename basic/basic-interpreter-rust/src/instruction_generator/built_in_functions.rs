@@ -1,6 +1,6 @@
 use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
-use crate::linter::{ExpressionNode, QNameNode, QualifiedName, TypeQualifier};
+use crate::linter::{ExpressionNode, QNameNode};
 
 impl InstructionGenerator {
     pub fn generate_built_in_function_call_instructions(

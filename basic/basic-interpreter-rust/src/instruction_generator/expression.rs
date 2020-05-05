@@ -1,4 +1,4 @@
-use super::{err, Instruction, InstructionGenerator, Result};
+use super::{Instruction, InstructionGenerator, Result};
 use crate::common::*;
 use crate::linter::*;
 use crate::variant::Variant;

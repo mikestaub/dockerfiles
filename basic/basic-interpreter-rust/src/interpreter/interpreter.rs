@@ -1,4 +1,3 @@
-use crate::casting::cast;
 use crate::common::*;
 use crate::instruction_generator::{Instruction, InstructionNode};
 use crate::interpreter::context::Context;
@@ -44,28 +43,8 @@ impl Registers {
         self.b.clone()
     }
 
-    pub fn get_c(&self) -> Variant {
-        self.c.clone()
-    }
-
-    pub fn get_d(&self) -> Variant {
-        self.d.clone()
-    }
-
     pub fn set_a(&mut self, v: Variant) {
         self.a = v;
-    }
-
-    pub fn set_b(&mut self, v: Variant) {
-        self.b = v;
-    }
-
-    pub fn set_c(&mut self, v: Variant) {
-        self.c = v;
-    }
-
-    pub fn set_d(&mut self, v: Variant) {
-        self.d = v;
     }
 
     pub fn copy_a_to_b(&mut self) {

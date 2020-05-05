@@ -3,9 +3,7 @@ use crate::common::*;
 use crate::linter::*;
 use std::collections::HashMap;
 
-pub type QualifiedFunctionImplementationNode = QualifiedImplementationNode<QualifiedName>;
 pub type FunctionContext = SubprogramContext<QualifiedName>;
-
 pub type SubContext = SubprogramContext<CaseInsensitiveString>;
 
 #[derive(Clone, Debug)]
@@ -77,13 +75,6 @@ impl<T: NameTrait> SubprogramContext<T> {
         self.implementations
             .get(name.bare_name())
             .map(|x| x.clone())
-    }
-
-    pub fn get_implementation_ref<U: NameTrait>(
-        &self,
-        name: &U,
-    ) -> Option<&QualifiedImplementationNode<T>> {
-        self.implementations.get(name.bare_name())
     }
 
     pub fn add_implementation(

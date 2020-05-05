@@ -17,9 +17,6 @@ where
     let program = parser.parse().unwrap();
     let linted_program = linter::lint(program).unwrap();
     let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
-    for i in instructions.iter() {
-        //println!("{:?}", i);
-    }
     let mut interpreter = Interpreter::new(MockStdlib::new());
     interpreter
         .interpret(instructions)
@@ -50,16 +47,6 @@ where
     let mut parser = Parser::from(input);
     let program = parser.parse().unwrap();
     linter::lint(program).unwrap_err()
-}
-
-pub fn instruction_generator_err<T>(input: T) -> instruction_generator::Error
-where
-    T: AsRef<[u8]>,
-{
-    let mut parser = Parser::from(input);
-    let program = parser.parse().unwrap();
-    let linted_program = linter::lint(program).unwrap();
-    instruction_generator::generate_instructions(linted_program).unwrap_err()
 }
 
 pub fn interpret_err<T>(input: T) -> InterpreterError

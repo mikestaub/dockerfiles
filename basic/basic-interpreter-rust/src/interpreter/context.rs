@@ -67,7 +67,6 @@ pub type ConstantMap = HashMap<CaseInsensitiveString, Variant>;
 pub type ArgumentMap = HashMap<CaseInsensitiveString, HashMap<TypeQualifier, Argument>>;
 pub type UnnamedArgs = VecDeque<Argument>;
 pub type Args = (ArgumentMap, UnnamedArgs);
-pub type FunctionResult = Option<Variant>;
 
 #[derive(Debug)]
 pub struct RootContext {
@@ -116,7 +115,6 @@ trait GetConstant {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<&Variant>;
 }
 
@@ -125,7 +123,6 @@ impl GetConstant for ConstantMap {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<&Variant> {
         match self.get(bare_name) {
             Some(v) => {
@@ -146,9 +143,8 @@ impl GetConstant for RootContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<&Variant> {
-        self.constants.get_constant(bare_name, qualifier, pos)
+        self.constants.get_constant(bare_name, qualifier)
     }
 }
 
@@ -157,9 +153,8 @@ impl GetConstant for SubContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<&Variant> {
-        self.constants.get_constant(bare_name, qualifier, pos)
+        self.constants.get_constant(bare_name, qualifier)
     }
 }
 
@@ -168,12 +163,11 @@ impl GetConstant for Context {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<&Variant> {
         match self {
-            Self::Root(r) => r.get_constant(bare_name, qualifier, pos),
-            Self::Args(a) => a.parent.get_constant(bare_name, qualifier, pos),
-            Self::Sub(s) => s.get_constant(bare_name, qualifier, pos),
+            Self::Root(r) => r.get_constant(bare_name, qualifier),
+            Self::Args(a) => a.parent.get_constant(bare_name, qualifier),
+            Self::Sub(s) => s.get_constant(bare_name, qualifier),
         }
     }
 }
@@ -183,16 +177,14 @@ trait GetParentConstant {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant>;
 }
 
 impl GetParentConstant for RootContext {
     fn get_parent_constant(
         &self,
-        bare_name: &CaseInsensitiveString,
-        qualifier: TypeQualifier,
-        pos: Location,
+        _bare_name: &CaseInsensitiveString,
+        _qualifier: TypeQualifier,
     ) -> Option<Variant> {
         None
     }
@@ -203,11 +195,10 @@ impl GetParentConstant for ArgsContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
-        match self.parent.get_constant(bare_name, qualifier, pos) {
+        match self.parent.get_constant(bare_name, qualifier) {
             Some(v) => Some(v.clone()),
-            None => self.parent.get_parent_constant(bare_name, qualifier, pos),
+            None => self.parent.get_parent_constant(bare_name, qualifier),
         }
     }
 }
@@ -217,11 +208,10 @@ impl GetParentConstant for SubContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
-        match self.parent.get_constant(bare_name, qualifier, pos) {
+        match self.parent.get_constant(bare_name, qualifier) {
             Some(v) => Some(v.clone()),
-            None => self.parent.get_parent_constant(bare_name, qualifier, pos),
+            None => self.parent.get_parent_constant(bare_name, qualifier),
         }
     }
 }
@@ -231,12 +221,11 @@ impl GetParentConstant for Context {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
         match self {
-            Self::Root(r) => r.get_parent_constant(bare_name, qualifier, pos),
-            Self::Args(a) => a.get_parent_constant(bare_name, qualifier, pos),
-            Self::Sub(s) => s.get_parent_constant(bare_name, qualifier, pos),
+            Self::Root(r) => r.get_parent_constant(bare_name, qualifier),
+            Self::Args(a) => a.get_parent_constant(bare_name, qualifier),
+            Self::Sub(s) => s.get_parent_constant(bare_name, qualifier),
         }
     }
 }
@@ -246,7 +235,6 @@ trait GetRValueQualified {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant>;
 }
 
@@ -255,10 +243,9 @@ impl GetRValueQualified for RootContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
         // local constant?
-        match self.constants.get_constant(bare_name, qualifier, pos) {
+        match self.constants.get_constant(bare_name, qualifier) {
             Some(v) => Some(v.clone()),
             None => {
                 // variable?
@@ -276,9 +263,8 @@ impl GetRValueQualified for ArgsContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
-        self.parent.get_r_value_q(bare_name, qualifier, pos)
+        self.parent.get_r_value_q(bare_name, qualifier)
     }
 }
 
@@ -287,18 +273,17 @@ impl GetRValueQualified for SubContext {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
         // local constant?
-        match self.get_constant(bare_name, qualifier, pos) {
+        match self.get_constant(bare_name, qualifier) {
             Some(v) => Some(v.clone()),
             None => {
                 // variable?
                 match self.get_variable(bare_name, qualifier) {
-                    Some(v) => self.evaluate_argument(v, pos),
+                    Some(v) => self.evaluate_argument(v),
                     None => {
                         // parent constant?
-                        self.get_parent_constant(bare_name, qualifier, pos)
+                        self.get_parent_constant(bare_name, qualifier)
                     }
                 }
             }
@@ -311,12 +296,11 @@ impl GetRValueQualified for Context {
         &self,
         bare_name: &CaseInsensitiveString,
         qualifier: TypeQualifier,
-        pos: Location,
     ) -> Option<Variant> {
         match self {
-            Self::Root(r) => r.get_r_value_q(bare_name, qualifier, pos),
-            Self::Args(a) => a.get_r_value_q(bare_name, qualifier, pos),
-            Self::Sub(s) => s.get_r_value_q(bare_name, qualifier, pos),
+            Self::Root(r) => r.get_r_value_q(bare_name, qualifier),
+            Self::Args(a) => a.get_r_value_q(bare_name, qualifier),
+            Self::Sub(s) => s.get_r_value_q(bare_name, qualifier),
         }
     }
 }
@@ -364,13 +348,6 @@ impl RootContext {
     // RValue
     //
 
-    pub fn get_r_value(&self, name_node: &QNameNode) -> Option<Variant> {
-        let bare_name = name_node.bare_name();
-        let qualifier = name_node.qualifier();
-        let pos = name_node.location();
-        self.get_r_value_q(bare_name, qualifier, pos)
-    }
-
     fn get_variable(
         &self,
         bare_name: &CaseInsensitiveString,
@@ -410,9 +387,8 @@ impl CreateParameter for RootContext {
     fn create_parameter(&mut self, name_node: &QNameNode) -> Argument {
         let bare_name = name_node.bare_name();
         let qualifier = name_node.qualifier();
-        let pos = name_node.location();
 
-        match self.get_constant(bare_name, qualifier, pos) {
+        match self.get_constant(bare_name, qualifier) {
             Some(v) => Argument::ByVal(v.clone()),
             None => {
                 match self.get_variable(bare_name, qualifier) {
@@ -570,17 +546,10 @@ impl SubContext {
     // RValue
     //
 
-    pub fn get_r_value(&self, name_node: &QNameNode) -> Option<Variant> {
-        let bare_name = name_node.bare_name();
-        let qualifier = name_node.qualifier();
-        let pos = name_node.location();
-        self.get_r_value_q(bare_name, qualifier, pos)
-    }
-
-    fn evaluate_argument(&self, arg: &Argument, pos: Location) -> Option<Variant> {
+    fn evaluate_argument(&self, arg: &Argument) -> Option<Variant> {
         match arg {
             Argument::ByVal(v) => Some(v.clone()),
-            Argument::ByRef(n) => self.parent.get_r_value_q(n.bare_name(), n.qualifier(), pos),
+            Argument::ByRef(n) => self.parent.get_r_value_q(n.bare_name(), n.qualifier()),
         }
     }
 
@@ -626,13 +595,13 @@ impl SubContext {
     // For built-in subs/functions
     //
 
-    pub fn pop_front_unnamed(&mut self, pos: Location) -> Variant {
-        self.try_pop_front_unnamed(pos).unwrap()
+    pub fn pop_front_unnamed(&mut self) -> Variant {
+        self.try_pop_front_unnamed().unwrap()
     }
 
-    pub fn try_pop_front_unnamed(&mut self, pos: Location) -> Option<Variant> {
+    pub fn try_pop_front_unnamed(&mut self) -> Option<Variant> {
         match self.unnamed_args.pop_front() {
-            Some(arg) => self.evaluate_argument(&arg, pos),
+            Some(arg) => self.evaluate_argument(&arg),
             None => None,
         }
     }
@@ -665,9 +634,8 @@ impl CreateParameter for SubContext {
     fn create_parameter(&mut self, name_node: &QNameNode) -> Argument {
         let bare_name = name_node.bare_name();
         let qualifier = name_node.qualifier();
-        let pos = name_node.location();
 
-        match self.get_constant(bare_name, qualifier, pos) {
+        match self.get_constant(bare_name, qualifier) {
             Some(v) => Argument::ByVal(v.clone()),
             None => {
                 // variable?
@@ -676,7 +644,7 @@ impl CreateParameter for SubContext {
                     Some(_) => Argument::ByRef(QualifiedName::new(bare_name.clone(), qualifier)),
                     None => {
                         // parent constant?
-                        match self.get_parent_constant(bare_name, qualifier, pos) {
+                        match self.get_parent_constant(bare_name, qualifier) {
                             Some(v) => Argument::ByVal(v.clone()),
                             None => {
                                 // create the variable in this scope
@@ -772,11 +740,7 @@ impl Context {
     // adapter methods
 
     pub fn get_r_value(&self, name_node: &QNameNode) -> Option<Variant> {
-        self.get_r_value_q(
-            name_node.bare_name(),
-            name_node.qualifier(),
-            name_node.location(),
-        )
+        self.get_r_value_q(name_node.bare_name(), name_node.qualifier())
     }
 
     pub fn set_l_value(

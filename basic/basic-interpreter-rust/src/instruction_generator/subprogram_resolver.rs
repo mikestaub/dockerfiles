@@ -1,7 +1,5 @@
-use super::built_in_functions;
-use super::built_in_subs;
 use super::subprogram_context::*;
-use super::{err, Result};
+use super::Result;
 use crate::common::*;
 use crate::linter::*;
 

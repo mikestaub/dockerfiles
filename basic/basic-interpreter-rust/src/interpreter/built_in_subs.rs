@@ -2,7 +2,7 @@ use crate::common::*;
 use crate::interpreter::context::Argument;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
-use crate::linter::{BareNameNode, HasQualifier, QualifiedName, TypeQualifier};
+use crate::linter::{HasQualifier, QualifiedName, TypeQualifier};
 use crate::variant::Variant;
 
 impl<S: Stdlib> Interpreter<S> {
@@ -10,7 +10,7 @@ impl<S: Stdlib> Interpreter<S> {
         if name == "PRINT" {
             let mut print_args: Vec<String> = vec![];
             loop {
-                match self.context_mut().demand_sub().try_pop_front_unnamed(pos) {
+                match self.context_mut().demand_sub().try_pop_front_unnamed() {
                     Some(v) => print_args.push(v.to_string()),
                     None => {
                         break;
@@ -20,11 +20,7 @@ impl<S: Stdlib> Interpreter<S> {
             self.stdlib.print(print_args);
             Ok(())
         } else if name == "ENVIRON" {
-            self.do_environ_sub(
-                // TODO cleanup
-                &name.clone().at(pos),
-                vec![pos],
-            )
+            self.do_environ_sub(pos)
         } else if name == "INPUT" {
             self.do_input(pos)
         } else {
@@ -32,18 +28,14 @@ impl<S: Stdlib> Interpreter<S> {
         }
     }
 
-    fn do_environ_sub(&mut self, sub_name_node: &BareNameNode, args: Vec<Location>) -> Result<()> {
-        match self
-            .context_mut()
-            .demand_sub()
-            .pop_front_unnamed(sub_name_node.location())
-        {
+    fn do_environ_sub(&mut self, pos: Location) -> Result<()> {
+        match self.context_mut().demand_sub().pop_front_unnamed() {
             Variant::VString(arg_string_value) => {
                 let parts: Vec<&str> = arg_string_value.split("=").collect();
                 if parts.len() != 2 {
                     Err(InterpreterError::new_with_pos(
                         "Invalid expression. Must be name=value.",
-                        args[0],
+                        pos,
                     ))
                 } else {
                     self.stdlib
@@ -51,7 +43,7 @@ impl<S: Stdlib> Interpreter<S> {
                     Ok(())
                 }
             }
-            _ => Err(InterpreterError::new_with_pos("Type mismatch", args[0])),
+            _ => panic!("Type mismatch"),
         }
     }
 

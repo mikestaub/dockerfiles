@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::linter::{QualifiedName, TypeQualifier};
+use crate::linter::QualifiedName;
 use crate::variant::Variant;
 
 #[derive(Debug, PartialEq)]

@@ -4,7 +4,6 @@ mod tests {
     use crate::assert_has_variable;
     use crate::assert_linter_err;
     use crate::common::*;
-    use crate::interpreter::InterpreterError;
     use crate::variant::Variant;
 
     #[test]
