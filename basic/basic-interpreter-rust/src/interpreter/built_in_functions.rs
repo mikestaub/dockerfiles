@@ -54,6 +54,8 @@ impl<S: Stdlib> Interpreter<S> {
 mod tests {
     use super::super::test_utils::*;
     use crate::assert_has_variable;
+    use crate::assert_linter_err;
+    use crate::common::*;
     use crate::interpreter::Stdlib;
     use crate::variant::Variant;
 
@@ -68,5 +70,25 @@ mod tests {
         let interpreter = interpret_with_stdlib(program, stdlib);
         assert_has_variable!(interpreter, "X$", "foo");
         assert_has_variable!(interpreter, "Y$", "");
+    }
+
+    #[test]
+    fn test_function_call_environ_no_args_linter_err() {
+        assert_linter_err!("X$ = ENVIRON$()", "Argument count mismatch", 1, 6);
+    }
+
+    #[test]
+    fn test_function_call_environ_two_args_linter_err() {
+        assert_linter_err!(
+            r#"X$ = ENVIRON$("hi", "bye")"#,
+            "Argument count mismatch",
+            1,
+            6
+        );
+    }
+
+    #[test]
+    fn test_function_call_environ_numeric_arg_linter_err() {
+        assert_linter_err!("X$ = ENVIRON$(42)", "Argument type mismatch", 1, 15);
     }
 }

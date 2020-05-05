@@ -14,7 +14,6 @@ impl InstructionGenerator {
     ) -> Result<()> {
         let (name, pos) = name_node.consume();
         if &name == "SYSTEM" {
-            // TODO ensure no args
             self.push(Instruction::Halt, pos);
         } else {
             self.generate_push_unnamed_args_instructions(args, pos)?;

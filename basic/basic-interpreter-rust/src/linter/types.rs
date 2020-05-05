@@ -1,3 +1,4 @@
+use super::error::*;
 use crate::common::*;
 use crate::parser::*;
 
@@ -16,6 +17,44 @@ pub enum Expression {
     FunctionCall(QualifiedName, Vec<ExpressionNode>),
     BinaryExpression(Operand, Box<ExpressionNode>, Box<ExpressionNode>),
     UnaryExpression(UnaryOperand, Box<ExpressionNode>),
+}
+
+impl Expression {
+    pub fn try_qualifier(&self) -> Result<TypeQualifier> {
+        match self {
+            Self::SingleLiteral(_) => Ok(TypeQualifier::BangSingle),
+            Self::DoubleLiteral(_) => Ok(TypeQualifier::HashDouble),
+            Self::StringLiteral(_) => Ok(TypeQualifier::DollarString),
+            Self::IntegerLiteral(_) => Ok(TypeQualifier::PercentInteger),
+            Self::LongLiteral(_) => Ok(TypeQualifier::AmpersandLong),
+            Self::Variable(name) | Self::Constant(name) | Self::FunctionCall(name, _) => {
+                Ok(name.qualifier())
+            }
+            Self::BinaryExpression(op, l, r) => {
+                let q_left = l.as_ref().as_ref().try_qualifier()?;
+                let q_right = r.as_ref().as_ref().try_qualifier()?;
+                if q_left.can_cast_to(q_right) {
+                    match op {
+                        Operand::Plus | Operand::Minus => Ok(q_left),
+                        Operand::LessThan | Operand::LessOrEqualThan => {
+                            Ok(TypeQualifier::PercentInteger)
+                        }
+                    }
+                } else {
+                    err("Type mismatch", r.as_ref().location())
+                }
+            }
+            Self::UnaryExpression(_, c) => {
+                let q_child = c.as_ref().as_ref().try_qualifier()?;
+                if q_child == TypeQualifier::DollarString {
+                    // no unary operator currently applicable to strings
+                    err("Type mismatch", c.as_ref().location())
+                } else {
+                    Ok(q_child)
+                }
+            }
+        }
+    }
 }
 
 pub type ExpressionNode = Locatable<Expression>;

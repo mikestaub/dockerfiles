@@ -1,3 +1,5 @@
+mod built_in_function_linter;
+mod built_in_sub_linter;
 mod error;
 mod for_next_counter_match;
 mod linter;

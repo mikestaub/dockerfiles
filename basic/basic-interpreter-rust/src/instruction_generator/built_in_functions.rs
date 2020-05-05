@@ -12,7 +12,6 @@ impl InstructionGenerator {
         function_name: QNameNode,
         args: Vec<ExpressionNode>,
     ) -> Result<()> {
-        // TODO validate arg len for ENVIRON$
         let pos = function_name.location();
         self.generate_push_unnamed_args_instructions(args, pos)?;
         self.push(Instruction::PushStack, pos);

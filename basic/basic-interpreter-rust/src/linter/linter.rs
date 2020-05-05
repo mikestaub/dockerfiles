@@ -15,9 +15,7 @@ use super::types::*;
 use crate::common::*;
 use crate::parser;
 use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::{
-    HasQualifier, Name, NameTrait, Operand, QualifiedName, TypeQualifier, TypeResolver,
-};
+use crate::parser::{HasQualifier, Name, NameTrait, QualifiedName, TypeQualifier, TypeResolver};
 use std::collections::{HashMap, HashSet};
 
 //
@@ -34,11 +32,7 @@ where
     T: Converter<A, B>,
 {
     fn convert(&mut self, a: Vec<A>) -> Result<Vec<B>> {
-        let mut result: Vec<B> = vec![];
-        for x in a {
-            result.push(self.convert(x)?);
-        }
-        Ok(result)
+        a.into_iter().map(|x| self.convert(x)).collect()
     }
 }
 
@@ -158,44 +152,6 @@ impl Linter {
             None => panic!("Stack underflow!"),
         }
     }
-
-    pub fn resolve_expression_type(&self, e_node: &ExpressionNode) -> Result<TypeQualifier> {
-        let pos = e_node.location();
-        let e: &Expression = e_node.as_ref();
-        match e {
-            Expression::SingleLiteral(_) => Ok(TypeQualifier::BangSingle),
-            Expression::DoubleLiteral(_) => Ok(TypeQualifier::HashDouble),
-            Expression::StringLiteral(_) => Ok(TypeQualifier::DollarString),
-            Expression::IntegerLiteral(_) => Ok(TypeQualifier::PercentInteger),
-            Expression::LongLiteral(_) => Ok(TypeQualifier::AmpersandLong),
-            Expression::Variable(name)
-            | Expression::Constant(name)
-            | Expression::FunctionCall(name, _) => Ok(name.qualifier()),
-            Expression::BinaryExpression(op, l, r) => {
-                let q_left = self.resolve_expression_type(l)?;
-                let q_right = self.resolve_expression_type(r)?;
-                if q_left.can_cast_to(q_right) {
-                    match op {
-                        Operand::Plus | Operand::Minus => Ok(q_left),
-                        Operand::LessThan | Operand::LessOrEqualThan => {
-                            Ok(TypeQualifier::PercentInteger)
-                        }
-                    }
-                } else {
-                    err("Type mismatch", pos)
-                }
-            }
-            Expression::UnaryExpression(_, c) => {
-                let q_child = self.resolve_expression_type(c)?;
-                if q_child == TypeQualifier::DollarString {
-                    // no unary operator currently applicable to strings
-                    err("Type mismatch", pos)
-                } else {
-                    Ok(q_child)
-                }
-            }
-        }
-    }
 }
 
 pub fn lint(program: parser::ProgramNode) -> Result<ProgramNode> {
@@ -224,10 +180,14 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
             }
         }
 
-        let n_d_c = super::no_dynamic_const::NoDynamicConst {};
-        n_d_c.visit_program(&result)?;
-        let f_n_c_m = super::for_next_counter_match::ForNextCounterMatch {};
-        f_n_c_m.visit_program(&result)?;
+        let linter = super::no_dynamic_const::NoDynamicConst {};
+        linter.visit_program(&result)?;
+        let linter = super::for_next_counter_match::ForNextCounterMatch {};
+        linter.visit_program(&result)?;
+        let linter = super::built_in_function_linter::BuiltInFunctionLinter {};
+        linter.visit_program(&result)?;
+        let linter = super::built_in_sub_linter::BuiltInSubLinter {};
+        linter.visit_program(&result)?;
 
         Ok(result)
     }
@@ -343,7 +303,7 @@ impl Converter<parser::Statement, Statement> for Linter {
                     err("Duplicate definition", pos)
                 } else {
                     let converted_expression_node = self.convert(e)?;
-                    let e_type = self.resolve_expression_type(&converted_expression_node)?;
+                    let e_type = converted_expression_node.as_ref().try_qualifier()?;
                     match name {
                         Name::Bare(b) => {
                             // bare name resolves from right side, not resolver
