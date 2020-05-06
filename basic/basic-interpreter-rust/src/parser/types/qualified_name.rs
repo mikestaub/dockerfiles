@@ -1,7 +1,6 @@
-use super::{HasQualifier, NameTrait, TypeQualifier, TypeResolver};
+use super::{HasQualifier, NameTrait, TypeQualifier};
 use crate::common::CaseInsensitiveString;
 use std::convert::TryFrom;
-use std::fmt::Display;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct QualifiedName {
@@ -24,12 +23,6 @@ impl HasQualifier for QualifiedName {
     }
 }
 
-impl Display for QualifiedName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.name, self.qualifier)
-    }
-}
-
 impl NameTrait for QualifiedName {
     fn bare_name(&self) -> &CaseInsensitiveString {
         &self.name
@@ -37,10 +30,6 @@ impl NameTrait for QualifiedName {
 
     fn opt_qualifier(&self) -> Option<TypeQualifier> {
         Some(self.qualifier)
-    }
-
-    fn eq_resolve<T: TypeResolver, U: NameTrait>(&self, other: &U, resolver: &T) -> bool {
-        self == &other.to_qualified_name(resolver)
     }
 }
 

@@ -1,4 +1,4 @@
-use super::error::{err, Result};
+use super::error::Result;
 use super::instruction::*;
 use super::subprogram_context::*;
 use super::subprogram_resolver;
@@ -14,17 +14,12 @@ pub struct InstructionGenerator {
     pub sub_context: SubContext,
 }
 
-fn sanitize(original_program: ProgramNode) -> Result<(ProgramNode, FunctionContext, SubContext)> {
-    // TODO convert to a different return type, not ProgramNode
-    let (program, f_c, s_c) = subprogram_resolver::resolve(original_program)?;
-    Ok((program, f_c, s_c))
-}
-
 pub fn generate_instructions(program: ProgramNode) -> Result<Vec<InstructionNode>> {
-    let (p, f, s) = sanitize(program)?;
+    // TODO convert to a different return type, not ProgramNode
+    let (p, f, s) = subprogram_resolver::resolve(program);
     let mut generator = InstructionGenerator::new(f, s);
     generator.generate_unresolved(p)?;
-    generator.resolve_instructions()?;
+    generator.resolve_instructions();
     Ok(generator.instructions)
 }
 
@@ -95,42 +90,20 @@ impl InstructionGenerator {
         Ok(())
     }
 
-    pub fn resolve_instructions(&mut self) -> Result<()> {
+    pub fn resolve_instructions(&mut self) {
         let labels = collect_labels(&self.instructions);
         // resolve jumps
         for instruction_node in self.instructions.iter_mut() {
             let instruction: &Instruction = instruction_node.as_ref();
             let pos: Location = instruction_node.location();
             if let Instruction::UnresolvedJump(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::Jump(*idx).at(pos);
-                    }
-                    None => {
-                        return err("Label not found", pos);
-                    }
-                }
+                *instruction_node = Instruction::Jump(*labels.get(x).unwrap()).at(pos);
             } else if let Instruction::UnresolvedJumpIfFalse(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::JumpIfFalse(*idx).at(pos);
-                    }
-                    None => {
-                        return err("Label not found", pos);
-                    }
-                }
+                *instruction_node = Instruction::JumpIfFalse(*labels.get(x).unwrap()).at(pos);
             } else if let Instruction::SetUnresolvedErrorHandler(x) = instruction {
-                match labels.get(x) {
-                    Some(idx) => {
-                        *instruction_node = Instruction::SetErrorHandler(*idx).at(pos);
-                    }
-                    None => {
-                        return err("Label not found", pos);
-                    }
-                }
+                *instruction_node = Instruction::SetErrorHandler(*labels.get(x).unwrap()).at(pos);
             }
         }
-        Ok(())
     }
 
     pub fn push(&mut self, i: Instruction, pos: Location) {

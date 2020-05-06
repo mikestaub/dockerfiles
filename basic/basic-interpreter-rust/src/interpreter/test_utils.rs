@@ -258,7 +258,7 @@ macro_rules! assert_linter_err {
         assert_eq!(actual_err, $expected_msg);
         assert_eq!(
             actual_pos.unwrap(),
-            Location::new($expected_row, $expected_col)
+            crate::common::Location::new($expected_row, $expected_col)
         );
     };
 }

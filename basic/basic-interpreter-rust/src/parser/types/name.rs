@@ -1,7 +1,6 @@
 use super::{HasQualifier, NameTrait, QualifiedName, TypeQualifier};
 use crate::common::CaseInsensitiveString;
 use std::convert::TryFrom;
-use std::fmt::Display;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Name {
@@ -55,15 +54,6 @@ impl<S: AsRef<str>> From<S> for Name {
                 buf.push(last_ch);
                 Name::Bare(CaseInsensitiveString::new(buf))
             }
-        }
-    }
-}
-
-impl Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Name::Bare(bare) => bare.fmt(f),
-            Name::Qualified(qualified) => qualified.fmt(f),
         }
     }
 }

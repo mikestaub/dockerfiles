@@ -200,6 +200,11 @@ impl Converter<parser::ProgramNode, ProgramNode> for Linter {
         let linter = super::user_defined_sub_linter::UserDefinedSubLinter { subs: &self.subs };
         linter.visit_program(&result)?;
 
+        let mut linter = super::label_linter::LabelLinter::new();
+        linter.visit_program(&result)?;
+        linter.switch_to_validating_mode();
+        linter.visit_program(&result)?;
+
         let reducer = super::undefined_function_reducer::UndefinedFunctionReducer {
             functions: &self.functions,
         };

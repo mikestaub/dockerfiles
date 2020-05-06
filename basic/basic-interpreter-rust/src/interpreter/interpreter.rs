@@ -203,7 +203,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 let name_node = n.clone().at(pos);
                 match self.context_ref().get_r_value(&name_node) {
                     Some(v) => self.set_a(v),
-                    None => panic!("Variable {} undefined at {:?}", n, pos),
+                    None => panic!("Variable {:?} undefined at {:?}", n, pos),
                 }
             }
             Instruction::LessThan => {

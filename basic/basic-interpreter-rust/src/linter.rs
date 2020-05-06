@@ -3,6 +3,7 @@ mod built_in_sub_linter;
 mod error;
 mod expression_reducer;
 mod for_next_counter_match;
+mod label_linter;
 mod linter;
 mod no_dynamic_const;
 mod post_conversion_linter;

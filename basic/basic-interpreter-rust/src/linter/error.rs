@@ -14,6 +14,7 @@ pub enum LinterError {
     InvalidAssignment,
     InvalidConstant,
     SubprogramNotDefined,
+    LabelNotFound,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

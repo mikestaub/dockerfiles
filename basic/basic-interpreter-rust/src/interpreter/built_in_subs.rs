@@ -108,7 +108,6 @@ fn parse_int_input(s: String) -> std::result::Result<i32, String> {
 mod tests {
     use super::super::test_utils::*;
     use crate::assert_linter_err;
-    use crate::common::*;
     use crate::linter::LinterError;
 
     #[test]

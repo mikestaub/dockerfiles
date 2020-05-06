@@ -1,4 +1,3 @@
-use super::{err, Result};
 use crate::common::*;
 use crate::linter::*;
 use std::collections::HashMap;
@@ -36,22 +35,6 @@ impl<T: NameTrait> HasLocation for QualifiedImplementationNode<T> {
     }
 }
 
-impl<T: NameTrait> NameTrait for QualifiedImplementationNode<T> {
-    fn bare_name(&self) -> &CaseInsensitiveString {
-        self.name.bare_name()
-    }
-
-    fn opt_qualifier(&self) -> Option<TypeQualifier> {
-        self.name.opt_qualifier()
-    }
-}
-
-impl<T: HasQualifier + NameTrait> HasQualifier for QualifiedImplementationNode<T> {
-    fn qualifier(&self) -> TypeQualifier {
-        self.name.qualifier()
-    }
-}
-
 #[derive(Debug)]
 pub struct SubprogramContext<T: NameTrait> {
     pub implementations: HashMap<CaseInsensitiveString, QualifiedImplementationNode<T>>,
@@ -62,10 +45,6 @@ impl<T: NameTrait> SubprogramContext<T> {
         SubprogramContext {
             implementations: HashMap::new(),
         }
-    }
-
-    pub fn has_implementation<U: NameTrait>(&self, name: &U) -> bool {
-        self.implementations.contains_key(name.bare_name())
     }
 
     pub fn get_implementation<U: NameTrait>(
@@ -83,16 +62,11 @@ impl<T: NameTrait> SubprogramContext<T> {
         parameters: Vec<QNameNode>,
         block: StatementNodes,
         pos: Location,
-    ) -> Result<()> {
+    ) {
         let bare_name: &CaseInsensitiveString = name_node.bare_name();
-        if self.has_implementation(bare_name) {
-            err("Duplicate definition", pos)
-        } else {
-            self.implementations.insert(
-                bare_name.clone(),
-                QualifiedImplementationNode::new(name_node, parameters, block, pos),
-            );
-            Ok(())
-        }
+        self.implementations.insert(
+            bare_name.clone(),
+            QualifiedImplementationNode::new(name_node, parameters, block, pos),
+        );
     }
 }

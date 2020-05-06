@@ -47,11 +47,23 @@ pub trait PostConversionLinter {
             Statement::Assignment(left, right) => self.visit_assignment(left, right),
             Statement::While(w) => self.visit_conditional_block(w),
             Statement::Const(left, right) => self.visit_const(left, right),
-            Statement::ErrorHandler(_label) => Ok(()),
-            Statement::Label(_label) => Ok(()),
-            Statement::GoTo(_label) => Ok(()),
+            Statement::ErrorHandler(label) => self.visit_error_handler(label),
+            Statement::Label(label) => self.visit_label(label),
+            Statement::GoTo(label) => self.visit_go_to(label),
             Statement::SetReturnValue(expr) => self.visit_expression(expr),
         }
+    }
+
+    fn visit_error_handler(&self, _label: &CaseInsensitiveString) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn visit_label(&self, _label: &CaseInsensitiveString) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn visit_go_to(&self, _label: &CaseInsensitiveString) -> Result<(), Error> {
+        Ok(())
     }
 
     fn visit_sub_call(
