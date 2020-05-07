@@ -1,6 +1,6 @@
 use crate::common::*;
 use crate::instruction_generator::{Instruction, InstructionNode};
-use crate::interpreter::context::Context;
+use crate::interpreter::context::*;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{InterpreterError, Result, Stdlib};
 
@@ -141,7 +141,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::Store(n) => {
                 let v = self.get_a();
-                self.context_mut().set_l_value(n, pos, v)?;
+                self.context_mut().set_l_value_q(n.clone(), pos, v)?;
             }
             Instruction::StoreConst(n) => {
                 let v = self.get_a();
@@ -267,7 +267,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             Instruction::PushUnnamedRefParam(name) => {
                 self.context_mut()
                     .demand_args()
-                    .push_back_unnamed_ref_parameter(&name.clone().at(pos));
+                    .push_back_unnamed_ref_parameter(name.clone());
             }
             Instruction::PushUnnamedValParam => {
                 let v = self.get_a();
@@ -276,10 +276,10 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                     .demand_args()
                     .push_back_unnamed_val_parameter(v);
             }
-            Instruction::SetNamedRefParam(param_q_name, ref_name) => {
+            Instruction::SetNamedRefParam(named_ref_param) => {
                 self.context_mut()
                     .demand_args()
-                    .set_named_ref_parameter(param_q_name, &ref_name.clone().at(pos));
+                    .set_named_ref_parameter(named_ref_param);
             }
             Instruction::SetNamedValParam(param_q_name) => {
                 let v = self.get_a();

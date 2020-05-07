@@ -51,8 +51,7 @@ pub enum Instruction {
 
     /// Pushes the contents of register A at the end of the unnamed stack
     PushUnnamedValParam,
-    // TODO disambiguate
-    SetNamedRefParam(QualifiedName, QualifiedName),
+    SetNamedRefParam(NamedRefParam),
     SetNamedValParam(QualifiedName),
 
     Throw(String),
@@ -67,3 +66,9 @@ pub enum Instruction {
 }
 
 pub type InstructionNode = Locatable<Instruction>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct NamedRefParam {
+    pub parameter_name: QualifiedName,
+    pub argument_name: QualifiedName,
+}

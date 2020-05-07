@@ -1,4 +1,5 @@
-use super::{Instruction, InstructionGenerator, Result};
+use super::instruction::*;
+use super::{InstructionGenerator, Result};
 use crate::common::*;
 use crate::linter::*;
 
@@ -42,7 +43,13 @@ impl InstructionGenerator {
             let (e, pos) = e_node.consume();
             match e {
                 Expression::Variable(v_name) => {
-                    self.push(Instruction::SetNamedRefParam(n.clone(), v_name), pos);
+                    self.push(
+                        Instruction::SetNamedRefParam(NamedRefParam {
+                            parameter_name: n.clone(),
+                            argument_name: v_name,
+                        }),
+                        pos,
+                    );
                 }
                 _ => {
                     self.generate_expression_instructions(e.at(pos))?;

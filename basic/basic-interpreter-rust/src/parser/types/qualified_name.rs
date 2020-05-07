@@ -15,6 +15,10 @@ impl QualifiedName {
             qualifier,
         }
     }
+
+    pub fn consume(self) -> (CaseInsensitiveString, TypeQualifier) {
+        (self.name, self.qualifier)
+    }
 }
 
 impl HasQualifier for QualifiedName {
