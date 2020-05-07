@@ -19,6 +19,5 @@ pub fn resolve(program: ProgramNode) -> (ProgramNode, FunctionContext, SubContex
             _ => reduced_program.push(top_level_token.at(pos)),
         }
     }
-    // TODO ensure no clash with built-ins
     (reduced_program, function_context, sub_context)
 }

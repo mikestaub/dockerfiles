@@ -16,7 +16,6 @@ impl<'a> PostConversionLinter for UserDefinedSubLinter<'a> {
         args: &Vec<ExpressionNode>,
     ) -> Result<(), Error> {
         if is_built_in_sub(name) {
-            // TODO somewhere ensure we can't override built-in subs
             Ok(())
         } else {
             match self.subs.get(name) {
