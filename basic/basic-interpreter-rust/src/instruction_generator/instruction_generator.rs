@@ -54,8 +54,10 @@ impl InstructionGenerator {
         }
 
         // add HALT instruction at end of program to separate from the functions and subs
-        // TODO: nice to have: use location of last statement
-        self.push(Instruction::Halt, Location::start());
+        self.push(
+            Instruction::Halt,
+            Location::new(std::u32::MAX, std::u32::MAX),
+        );
 
         // functions
         for x in self.function_context.implementations.clone().into_iter() {
