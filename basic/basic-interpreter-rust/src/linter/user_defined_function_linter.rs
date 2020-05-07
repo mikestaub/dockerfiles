@@ -16,8 +16,7 @@ impl<'a> UserDefinedFunctionLinter<'a> {
         name: &QualifiedName,
         args: &Vec<ExpressionNode>,
     ) -> Result<(), Error> {
-        if is_built_in_function(name) {
-            // TODO somewhere ensure we can't override built-in functions
+        if is_built_in_function(name.bare_name()) {
             Ok(())
         } else {
             let bare_name = name.bare_name();

@@ -180,4 +180,33 @@ mod tests {
         let interpreter = interpret(program);
         assert_eq!(interpreter.stdlib.output, vec!["6"]);
     }
+
+    #[test]
+    fn test_cannot_override_built_in_function_with_declaration() {
+        let program = r#"
+        DECLARE FUNCTION Environ$
+        PRINT "Hello"
+        FUNCTION Environ$
+        END FUNCTION
+        "#;
+        assert_linter_err!(program, LinterError::DuplicateDefinition, 4, 9);
+    }
+
+    #[test]
+    fn test_cannot_override_built_in_function_without_declaration() {
+        let program = r#"
+        PRINT "Hello"
+        FUNCTION Environ$
+        END FUNCTION
+        "#;
+        assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 9);
+    }
+
+    #[test]
+    fn test_cannot_call_built_in_function_with_wrong_type() {
+        let program = r#"
+        PRINT "Hello", Environ%("oops")
+        "#;
+        assert_linter_err!(program, LinterError::TypeMismatch, 2, 24);
+    }
 }

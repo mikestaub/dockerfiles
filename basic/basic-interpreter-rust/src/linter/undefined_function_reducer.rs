@@ -26,7 +26,9 @@ impl<'a> ExpressionReducer for UndefinedFunctionReducer<'a> {
                 Ok(Expression::UnaryExpression(op, Box::new(mapped_child)))
             }
             Expression::FunctionCall(name, args) => {
-                if is_built_in_function(&name) || self.functions.contains_key(name.bare_name()) {
+                if is_built_in_function(name.bare_name())
+                    || self.functions.contains_key(name.bare_name())
+                {
                     let r_args: Vec<ExpressionNode> = args
                         .into_iter()
                         .map(|a| self.visit_expression_node(a))

@@ -11,7 +11,7 @@ impl InstructionGenerator {
     ) -> Result<()> {
         let pos = function_name.location();
 
-        if is_built_in_function(function_name.as_ref()) {
+        if is_built_in_function(function_name.as_ref().bare_name()) {
             self.generate_built_in_function_call_instructions(function_name, args)?;
         } else {
             let pos = function_name.location();

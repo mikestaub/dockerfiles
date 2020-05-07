@@ -1,3 +1,5 @@
+use super::built_in_function_linter::is_built_in_function;
+use super::built_in_sub_linter::is_built_in_sub;
 use super::error::*;
 use crate::common::*;
 use crate::parser;
@@ -156,6 +158,13 @@ impl PostVisitor<parser::ProgramNode> for FunctionContext {
                 return err(LinterError::SubprogramNotDefined, v.2);
             }
         }
+
+        for (k, v) in self.implementations.iter() {
+            if is_built_in_function(k) {
+                return err(LinterError::DuplicateDefinition, v.2);
+            }
+        }
+
         Ok(())
     }
 }
@@ -277,6 +286,13 @@ impl PostVisitor<parser::ProgramNode> for SubContext {
                 return err(LinterError::SubprogramNotDefined, v.1);
             }
         }
+
+        for (k, v) in self.implementations.iter() {
+            if is_built_in_sub(k) {
+                return err(LinterError::DuplicateDefinition, v.1);
+            }
+        }
+
         Ok(())
     }
 }

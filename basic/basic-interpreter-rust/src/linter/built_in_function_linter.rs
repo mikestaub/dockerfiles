@@ -2,13 +2,48 @@ use super::error::*;
 use super::post_conversion_linter::PostConversionLinter;
 use super::types::*;
 use crate::common::*;
-use crate::parser::{QualifiedName, TypeQualifier};
+use crate::parser::{HasQualifier, NameTrait, QualifiedName, TypeQualifier};
 use std::convert::TryFrom;
 
 pub struct BuiltInFunctionLinter;
 
-pub fn is_built_in_function(function_name: &QualifiedName) -> bool {
-    function_name == &QualifiedName::new("ENVIRON", TypeQualifier::DollarString)
+enum BuiltInFunction {
+    /// ENVIRON$
+    Environ,
+}
+
+impl From<&CaseInsensitiveString> for Option<BuiltInFunction> {
+    fn from(s: &CaseInsensitiveString) -> Option<BuiltInFunction> {
+        if s == "ENVIRON" {
+            Some(BuiltInFunction::Environ)
+        } else {
+            None
+        }
+    }
+}
+
+impl TryFrom<&QualifiedName> for Option<BuiltInFunction> {
+    type Error = Error;
+    fn try_from(q: &QualifiedName) -> Result<Option<BuiltInFunction>, Self::Error> {
+        let opt_built_in: Option<BuiltInFunction> = q.bare_name().into();
+        match opt_built_in {
+            Some(b) => match b {
+                BuiltInFunction::Environ => {
+                    if q.qualifier() == TypeQualifier::DollarString {
+                        Ok(Some(b))
+                    } else {
+                        err_no_pos(LinterError::TypeMismatch)
+                    }
+                }
+            },
+            None => Ok(None),
+        }
+    }
+}
+
+pub fn is_built_in_function(function_name: &CaseInsensitiveString) -> bool {
+    let opt_built_in: Option<BuiltInFunction> = function_name.into();
+    opt_built_in.is_some()
 }
 
 impl BuiltInFunctionLinter {
@@ -17,10 +52,11 @@ impl BuiltInFunctionLinter {
         name: &QualifiedName,
         args: &Vec<ExpressionNode>,
     ) -> Result<(), Error> {
-        if name == &QualifiedName::try_from("ENVIRON$").unwrap() {
-            self.visit_environ(args)
-        } else {
-            Ok(())
+        match Option::<BuiltInFunction>::try_from(name)? {
+            Some(b) => match b {
+                BuiltInFunction::Environ => self.visit_environ(args),
+            },
+            None => Ok(()),
         }
     }
 
