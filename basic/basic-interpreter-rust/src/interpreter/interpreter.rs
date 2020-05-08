@@ -145,8 +145,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::StoreConst(n) => {
                 let v = self.get_a();
-                self.context_mut()
-                    .set_const_l_value(n.clone(), v);
+                self.context_mut().set_const_l_value(n.clone(), v);
             }
             Instruction::CopyAToB => {
                 self.registers_mut().copy_a_to_b();

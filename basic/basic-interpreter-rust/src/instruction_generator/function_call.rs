@@ -16,15 +16,12 @@ impl InstructionGenerator {
         } else {
             let pos = function_name.location();
             let bare_name: &CaseInsensitiveString = function_name.bare_name();
-            let function_impl = self.function_context.get_implementation(bare_name).unwrap();
-            let label = CaseInsensitiveString::new(format!(":fun:{}", bare_name));
-
-            self.generate_push_named_args_instructions(&function_impl.parameters, args, pos)?;
+            let function_parameters = self.function_context.get(bare_name).unwrap().clone();
+            self.generate_push_named_args_instructions(function_parameters, args, pos)?;
             self.push(Instruction::PushStack, pos);
-
             let idx = self.instructions.len();
             self.push(Instruction::PushRet(idx + 2), pos);
-            self.push(Instruction::UnresolvedJump(label), pos);
+            self.jump_to_function(bare_name, pos);
         }
         self.push(Instruction::PopStack, pos);
         self.push(Instruction::CopyResultToA, pos);
@@ -33,19 +30,18 @@ impl InstructionGenerator {
 
     pub fn generate_push_named_args_instructions(
         &mut self,
-        param_names: &Vec<QualifiedName>,
+        param_names: Vec<QualifiedName>,
         expressions: Vec<ExpressionNode>,
         pos: Location,
     ) -> Result<()> {
-        // TODO validate cast if by val, same type if by ref
         self.push(Instruction::PreparePush, pos);
-        for (n, e_node) in param_names.iter().zip(expressions.into_iter()) {
+        for (n, e_node) in param_names.into_iter().zip(expressions.into_iter()) {
             let (e, pos) = e_node.consume();
             match e {
                 Expression::Variable(v_name) => {
                     self.push(
                         Instruction::SetNamedRefParam(NamedRefParam {
-                            parameter_name: n.clone(),
+                            parameter_name: n,
                             argument_name: v_name,
                         }),
                         pos,
@@ -53,7 +49,7 @@ impl InstructionGenerator {
                 }
                 _ => {
                     self.generate_expression_instructions(e.at(pos))?;
-                    self.push(Instruction::SetNamedValParam(n.clone()), pos);
+                    self.push(Instruction::SetNamedValParam(n), pos);
                 }
             }
         }

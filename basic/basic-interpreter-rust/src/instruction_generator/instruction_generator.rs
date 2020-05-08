@@ -1,24 +1,53 @@
 use super::error::Result;
 use super::instruction::*;
-use super::subprogram_context::*;
-use super::subprogram_resolver;
 use crate::common::*;
 use crate::linter::*;
 use crate::variant::Variant;
 
 use std::collections::HashMap;
 
+// pass 1: collect function names -> parameter names, in order to use them in function/sub calls
+
+type ParamMap = HashMap<CaseInsensitiveString, Vec<QualifiedName>>;
+
+fn collect_parameter_names(program: &ProgramNode) -> (ParamMap, ParamMap) {
+    let mut functions: ParamMap = HashMap::new();
+    let mut subs: ParamMap = HashMap::new();
+
+    for top_level_token_node in program {
+        let top_level_token = top_level_token_node.as_ref();
+        match top_level_token {
+            TopLevelToken::FunctionImplementation(f) => {
+                // collect param names
+                functions.insert(
+                    f.name.bare_name().clone(),
+                    f.params.clone().strip_location(),
+                );
+            }
+            TopLevelToken::SubImplementation(s) => {
+                // collect param names
+                subs.insert(
+                    s.name.bare_name().clone(),
+                    s.params.clone().strip_location(),
+                );
+            }
+            _ => (),
+        }
+    }
+
+    (functions, subs)
+}
+
 pub struct InstructionGenerator {
     pub instructions: Vec<InstructionNode>,
-    pub function_context: FunctionContext,
-    pub sub_context: SubContext,
+    pub function_context: ParamMap,
+    pub sub_context: ParamMap,
 }
 
 pub fn generate_instructions(program: ProgramNode) -> Result<Vec<InstructionNode>> {
-    // TODO convert to a different return type, not ProgramNode
-    let (p, f, s) = subprogram_resolver::resolve(program);
+    let (f, s) = collect_parameter_names(&program);
     let mut generator = InstructionGenerator::new(f, s);
-    generator.generate_unresolved(p)?;
+    generator.generate_unresolved(program)?;
     generator.resolve_instructions();
     Ok(generator.instructions)
 }
@@ -34,7 +63,7 @@ fn collect_labels(instructions: &Vec<InstructionNode>) -> HashMap<CaseInsensitiv
 }
 
 impl InstructionGenerator {
-    pub fn new(function_context: FunctionContext, sub_context: SubContext) -> Self {
+    pub fn new(function_context: ParamMap, sub_context: ParamMap) -> Self {
         Self {
             instructions: vec![],
             function_context,
@@ -43,13 +72,17 @@ impl InstructionGenerator {
     }
 
     pub fn generate_unresolved(&mut self, program: ProgramNode) -> Result<()> {
+        let mut functions: Vec<(FunctionImplementation, Location)> = vec![];
+        let mut subs: Vec<(SubImplementation, Location)> = vec![];
+
         for t in program {
             let (top_level_token, pos) = t.consume();
             match top_level_token {
                 TopLevelToken::Statement(s) => {
                     self.generate_statement_node_instructions(s.at(pos))?;
                 }
-                _ => unimplemented!(),
+                TopLevelToken::FunctionImplementation(f) => functions.push((f, pos)),
+                TopLevelToken::SubImplementation(s) => subs.push((s, pos)),
             }
         }
 
@@ -60,13 +93,10 @@ impl InstructionGenerator {
         );
 
         // functions
-        for x in self.function_context.implementations.clone().into_iter() {
-            let (_, v) = x;
-            let pos = v.location();
-            let name = v.name;
-            let block = v.block;
-            let label = CaseInsensitiveString::new(format!(":fun:{}", name.bare_name()));
-            self.push(Instruction::Label(label), pos);
+        for (f, pos) in functions {
+            let name = f.name;
+            let block = f.body;
+            self.function_label(name.bare_name(), pos);
             // set default value
             self.push(
                 Instruction::Load(Variant::default_variant(name.qualifier())),
@@ -78,13 +108,10 @@ impl InstructionGenerator {
         }
 
         // subs
-        for x in self.sub_context.implementations.clone().into_iter() {
-            let (_, v) = x;
-            let pos = v.location();
-            let name = v.name;
-            let block = v.block;
-            let label = CaseInsensitiveString::new(format!(":sub:{}", name.bare_name()));
-            self.push(Instruction::Label(label), pos);
+        for (s, pos) in subs {
+            let name = s.name;
+            let block = s.body;
+            self.sub_label(name.bare_name(), pos);
             self.generate_block_instructions(block)?;
             self.push(Instruction::PopRet, pos);
         }
@@ -140,6 +167,46 @@ impl InstructionGenerator {
                 "_{}_{:?}",
                 prefix.as_ref(),
                 pos
+            ))),
+            pos,
+        );
+    }
+
+    pub fn function_label<S: AsRef<str>>(&mut self, name: S, pos: Location) {
+        self.push(
+            Instruction::Label(CaseInsensitiveString::new(format!(
+                ":fun:{}",
+                name.as_ref(),
+            ))),
+            pos,
+        );
+    }
+
+    pub fn jump_to_function<S: AsRef<str>>(&mut self, name: S, pos: Location) {
+        self.push(
+            Instruction::UnresolvedJump(CaseInsensitiveString::new(format!(
+                ":fun:{}",
+                name.as_ref(),
+            ))),
+            pos,
+        );
+    }
+
+    pub fn sub_label<S: AsRef<str>>(&mut self, name: S, pos: Location) {
+        self.push(
+            Instruction::Label(CaseInsensitiveString::new(format!(
+                ":sub:{}",
+                name.as_ref(),
+            ))),
+            pos,
+        );
+    }
+
+    pub fn jump_to_sub<S: AsRef<str>>(&mut self, name: S, pos: Location) {
+        self.push(
+            Instruction::UnresolvedJump(CaseInsensitiveString::new(format!(
+                ":sub:{}",
+                name.as_ref(),
             ))),
             pos,
         );

@@ -1,5 +1,5 @@
 use crate::casting;
-use crate::common::{CaseInsensitiveString};
+use crate::common::CaseInsensitiveString;
 use crate::instruction_generator::NamedRefParam;
 use crate::linter::*;
 use crate::variant::Variant;
@@ -344,7 +344,7 @@ impl RootContext {
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant)  {
+    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
         self.constants.insert(name, value);
     }
 }
@@ -377,7 +377,7 @@ impl CreateParameter for RootContext {
 }
 
 impl SetLValueQ for RootContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
         // Arguments do not exist at root level. Create/Update a variable.
         self.do_insert_variable(name, value);
     }
@@ -422,7 +422,7 @@ impl CreateParameter for ArgsContext {
 }
 
 impl SetLValueQ for ArgsContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
         self.parent.set_l_value_q(name, value)
     }
 }
@@ -436,11 +436,7 @@ impl SubContext {
     // LValue (e.g. X = ?, FOR X = ?)
     //
 
-    fn set_l_value_q_parent(
-        &mut self,
-        name: QualifiedName,
-        value: Variant,
-    )  {
+    fn set_l_value_q_parent(&mut self, name: QualifiedName, value: Variant) {
         self.parent.set_l_value_q(name, value)
     }
 
@@ -471,7 +467,7 @@ impl SubContext {
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant)  {
+    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
         self.constants.insert(name, value);
     }
 
@@ -502,11 +498,7 @@ impl SubContext {
         self.unnamed_args.pop_front()
     }
 
-    pub fn set_value_to_popped_arg(
-        &mut self,
-        arg: &Argument,
-        value: Variant,
-    )  {
+    pub fn set_value_to_popped_arg(&mut self, arg: &Argument, value: Variant) {
         match arg {
             Argument::ByVal(_) => panic!("Expected variable"),
             Argument::ByRef(n) => {
@@ -552,7 +544,7 @@ impl CreateParameter for SubContext {
 }
 
 impl SetLValueQ for SubContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
         // if a parameter exists, set it (might be a ref)
         match self.get_argument_mut(&name) {
             Some(a) => {
@@ -670,7 +662,7 @@ impl CreateParameter for Context {
 }
 
 impl SetLValueQ for Context {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
         match self {
             Self::Root(r) => r.set_l_value_q(name, value),
             Self::Sub(s) => s.set_l_value_q(name, value),

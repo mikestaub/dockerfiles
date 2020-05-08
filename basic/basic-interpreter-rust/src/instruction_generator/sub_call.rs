@@ -13,13 +13,12 @@ impl InstructionGenerator {
             self.generate_built_in_sub_call_instructions(name_node, args)?;
         } else {
             let (name, pos) = name_node.consume();
-            let label = CaseInsensitiveString::new(format!(":sub:{}", name));
-            let sub_impl = self.sub_context.get_implementation(&name).unwrap();
-            self.generate_push_named_args_instructions(&sub_impl.parameters, args, pos)?;
+            let sub_impl_parameters = self.sub_context.get(&name).unwrap().clone();
+            self.generate_push_named_args_instructions(sub_impl_parameters, args, pos)?;
             self.push(Instruction::PushStack, pos);
             let idx = self.instructions.len();
             self.push(Instruction::PushRet(idx + 2), pos);
-            self.push(Instruction::UnresolvedJump(label), pos);
+            self.jump_to_sub(name, pos);
         }
         self.push(Instruction::PopStack, pos);
         Ok(())

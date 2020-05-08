@@ -10,8 +10,6 @@ mod instruction;
 mod instruction_generator;
 mod statement;
 mod sub_call;
-mod subprogram_context;
-mod subprogram_resolver;
 mod while_wend;
 
 pub use self::error::*;

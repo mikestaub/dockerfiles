@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
     use crate::assert_has_variable;
-    use crate::interpreter::test_utils::*;
-    use crate::variant::Variant;
-    use crate::common::*;
-    use crate::linter::*;
-    use std::convert::TryFrom;
-    use crate::interpreter::context_owner::ContextOwner;
     use crate::assert_linter_err;
+    use crate::common::*;
+    use crate::interpreter::context_owner::ContextOwner;
+    use crate::interpreter::test_utils::*;
+    use crate::linter::*;
+    use crate::variant::Variant;
+    use std::convert::TryFrom;
 
     mod assignment {
         use super::*;

@@ -16,7 +16,9 @@ use super::types::*;
 use crate::common::*;
 use crate::parser;
 use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::{HasQualifier, Name, NameTrait, QualifiedName, TypeQualifier, TypeResolver, Operand};
+use crate::parser::{
+    HasQualifier, Name, NameTrait, Operand, QualifiedName, TypeQualifier, TypeResolver,
+};
 use std::collections::{HashMap, HashSet};
 
 //
@@ -430,7 +432,7 @@ impl Converter<parser::Expression, Expression> for Linter {
                 let is_valid_op = match op {
                     // you can't do "A" - "B"
                     Operand::Minus => can_cast && q_left != TypeQualifier::DollarString,
-                    _ => can_cast
+                    _ => can_cast,
                 };
                 if is_valid_op {
                     Ok(Expression::BinaryExpression(
