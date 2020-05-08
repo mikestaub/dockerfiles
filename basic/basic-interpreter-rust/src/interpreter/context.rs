@@ -1,6 +1,5 @@
-use super::{InterpreterError, Result};
-use crate::casting::cast;
-use crate::common::{CaseInsensitiveString, HasLocation, Location};
+use crate::casting;
+use crate::common::{CaseInsensitiveString};
 use crate::instruction_generator::NamedRefParam;
 use crate::linter::*;
 use crate::variant::Variant;
@@ -61,15 +60,101 @@ pub enum Argument {
 
 // TODO review how much is needed after linter, run code coverage
 
-fn do_cast(value: Variant, qualifier: TypeQualifier, pos: Location) -> Result<Variant> {
-    cast(value, qualifier).map_err(|e| InterpreterError::new_with_pos(e, pos))
+trait Cast {
+    fn cast(self, qualifier: TypeQualifier) -> Self;
 }
 
-pub type VariableMap = HashMap<CaseInsensitiveString, HashMap<TypeQualifier, Variant>>;
-pub type ConstantMap = HashMap<CaseInsensitiveString, Variant>;
-pub type ArgumentMap = HashMap<CaseInsensitiveString, HashMap<TypeQualifier, Argument>>;
-pub type UnnamedArgs = VecDeque<Argument>;
-pub type Args = (ArgumentMap, UnnamedArgs);
+impl Cast for Variant {
+    fn cast(self, qualifier: TypeQualifier) -> Self {
+        casting::cast(self, qualifier).unwrap()
+    }
+}
+
+impl Cast for Argument {
+    fn cast(self, qualifier: TypeQualifier) -> Self {
+        match self {
+            Self::ByRef(n) => Self::ByRef(n),
+            Self::ByVal(v) => Self::ByVal(casting::cast(v, qualifier).unwrap()),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct NameMap<T: std::fmt::Debug + Sized + Cast>(
+    HashMap<CaseInsensitiveString, HashMap<TypeQualifier, T>>,
+);
+
+impl<T: std::fmt::Debug + Sized + Cast> NameMap<T> {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn insert(&mut self, name: QualifiedName, value: T) {
+        let (bare_name, qualifier) = name.consume();
+        match self.0.get_mut(&bare_name) {
+            Some(inner_map) => {
+                inner_map.insert(qualifier, value.cast(qualifier));
+            }
+            None => {
+                let mut inner_map: HashMap<TypeQualifier, T> = HashMap::new();
+                inner_map.insert(qualifier, value.cast(qualifier));
+                self.0.insert(bare_name, inner_map);
+            }
+        }
+    }
+
+    pub fn get(&self, name: &QualifiedName) -> Option<&T> {
+        match self.0.get(name.bare_name()) {
+            Some(inner_map) => inner_map.get(&name.qualifier()),
+            None => None,
+        }
+    }
+
+    pub fn get_mut(&mut self, name: &QualifiedName) -> Option<&mut T> {
+        match self.0.get_mut(name.bare_name()) {
+            Some(inner_map) => inner_map.get_mut(&name.qualifier()),
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ConstantMap(HashMap<CaseInsensitiveString, Variant>);
+
+impl ConstantMap {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn get(&self, name: &QualifiedName) -> Option<&Variant> {
+        match self.0.get(name.bare_name()) {
+            Some(v) => {
+                if name.qualifier() == v.qualifier() {
+                    Some(v)
+                } else {
+                    // trying to reference a constant with wrong type
+                    panic!("Duplicate definition")
+                }
+            }
+            None => None,
+        }
+    }
+
+    pub fn insert(&mut self, name: QualifiedName, value: Variant) {
+        match self.0.get(name.bare_name()) {
+            Some(_) => panic!("Duplicate definition"),
+            None => {
+                let (bare_name, qualifier) = name.consume();
+                self.0.insert(bare_name, value.cast(qualifier));
+            }
+        }
+    }
+}
+
+type VariableMap = NameMap<Variant>;
+type ArgumentMap = NameMap<Argument>;
+type UnnamedArgs = VecDeque<Argument>;
+type Args = (ArgumentMap, UnnamedArgs);
 
 #[derive(Debug)]
 pub struct RootContext {
@@ -104,38 +189,22 @@ trait CreateParameter {
 }
 
 pub trait SetLValueQ {
-    fn set_l_value_q(&mut self, name: QualifiedName, pos: Location, value: Variant) -> Result<()>;
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant);
 }
 
 trait GetConstant {
     fn get_constant(&self, name: &QualifiedName) -> Option<&Variant>;
 }
 
-impl GetConstant for ConstantMap {
-    fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        match self.get(name.bare_name()) {
-            Some(v) => {
-                if name.qualifier() == v.qualifier() {
-                    Some(v)
-                } else {
-                    // trying to reference a constant with wrong type
-                    panic!("Duplicate definition")
-                }
-            }
-            None => None,
-        }
-    }
-}
-
 impl GetConstant for RootContext {
     fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        self.constants.get_constant(name)
+        self.constants.get(name)
     }
 }
 
 impl GetConstant for SubContext {
     fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        self.constants.get_constant(name)
+        self.constants.get(name)
     }
 }
 
@@ -194,7 +263,7 @@ trait GetRValueQualified {
 impl GetRValueQualified for RootContext {
     fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant> {
         // local constant?
-        match self.constants.get_constant(name) {
+        match self.constants.get(name) {
             Some(v) => Some(v.clone()),
             None => {
                 // variable?
@@ -249,8 +318,8 @@ impl GetRValueQualified for Context {
 impl RootContext {
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
-            constants: HashMap::new(),
+            variables: NameMap::new(),
+            constants: ConstantMap::new(),
             function_result: Variant::VInteger(0),
         }
     }
@@ -260,21 +329,7 @@ impl RootContext {
     //
 
     fn do_insert_variable(&mut self, name: QualifiedName, value: Variant) {
-        match self.variables.get_mut(name.bare_name()) {
-            Some(inner_map) => {
-                inner_map.insert(name.qualifier(), value);
-            }
-            None => {
-                let mut inner_map: HashMap<TypeQualifier, Variant> = HashMap::new();
-                let (bare_name, qualifier) = name.consume();
-                inner_map.insert(qualifier, value);
-                self.variables.insert(bare_name, inner_map);
-            }
-        }
-    }
-
-    fn constant_exists_no_recursion<U: NameTrait>(&self, name_node: &U) -> bool {
-        self.constants.contains_key(name_node.bare_name())
+        self.variables.insert(name, value);
     }
 
     //
@@ -282,29 +337,15 @@ impl RootContext {
     //
 
     fn get_variable(&self, name: &QualifiedName) -> Option<&Variant> {
-        match self.variables.get(name.bare_name()) {
-            Some(inner_map) => inner_map.get(&name.qualifier()),
-            None => None,
-        }
+        self.variables.get(name)
     }
 
     //
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
-        let pos = name_node.location();
-        // subtle difference, bare name constants get their type from the value
-        let bare_name: &CaseInsensitiveString = name_node.bare_name();
-        let qualifier = name_node.qualifier();
-        let casted: Variant = do_cast(value, qualifier, pos)?;
-        // if a local constant or parameter or variable already exists throw an error
-        if self.constant_exists_no_recursion(name_node) || self.variables.contains_key(bare_name) {
-            return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
-        }
-        // set it
-        self.constants.insert(bare_name.clone(), casted);
-        Ok(())
+    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant)  {
+        self.constants.insert(name, value);
     }
 }
 
@@ -336,15 +377,9 @@ impl CreateParameter for RootContext {
 }
 
 impl SetLValueQ for RootContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, pos: Location, value: Variant) -> Result<()> {
-        // if a constant exists, throw error
-        if self.constant_exists_no_recursion(&name) {
-            return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
-        }
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
         // Arguments do not exist at root level. Create/Update a variable.
-        let casted = do_cast(value, name.qualifier(), pos)?;
-        self.do_insert_variable(name, casted);
-        Ok(())
+        self.do_insert_variable(name, value);
     }
 }
 
@@ -372,18 +407,7 @@ impl ArgsContext {
     }
 
     fn insert_next_argument(&mut self, param_name: &QualifiedName, arg: Argument) {
-        match self.args.0.get_mut(param_name.bare_name()) {
-            Some(inner_map) => {
-                inner_map.insert(param_name.qualifier(), arg);
-            }
-            None => {
-                let mut inner_map: HashMap<TypeQualifier, Argument> = HashMap::new();
-                inner_map.insert(param_name.qualifier(), arg);
-                self.args
-                    .0
-                    .insert(param_name.bare_name().clone(), inner_map);
-            }
-        }
+        self.args.0.insert(param_name.clone(), arg);
     }
 }
 
@@ -398,8 +422,8 @@ impl CreateParameter for ArgsContext {
 }
 
 impl SetLValueQ for ArgsContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, pos: Location, value: Variant) -> Result<()> {
-        self.parent.set_l_value_q(name, pos, value)
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
+        self.parent.set_l_value_q(name, value)
     }
 }
 
@@ -414,36 +438,18 @@ impl SubContext {
 
     fn set_l_value_q_parent(
         &mut self,
-        n: QualifiedName,
-        pos: Location,
+        name: QualifiedName,
         value: Variant,
-    ) -> Result<()> {
-        self.parent.set_l_value_q(n, pos, value)
+    )  {
+        self.parent.set_l_value_q(name, value)
     }
 
     fn do_insert_variable(&mut self, name: QualifiedName, value: Variant) {
-        match self.variables.get_mut(name.bare_name()) {
-            Some(inner_map) => {
-                inner_map.insert(name.qualifier(), Argument::ByVal(value));
-            }
-            None => {
-                let mut inner_map: HashMap<TypeQualifier, Argument> = HashMap::new();
-                let (bare_name, qualifier) = name.consume();
-                inner_map.insert(qualifier, Argument::ByVal(value));
-                self.variables.insert(bare_name, inner_map);
-            }
-        }
-    }
-
-    fn constant_exists_no_recursion<U: NameTrait>(&self, name_node: &U) -> bool {
-        self.constants.contains_key(name_node.bare_name())
+        self.variables.insert(name, Argument::ByVal(value));
     }
 
     fn get_argument_mut(&mut self, name: &QualifiedName) -> Option<&mut Argument> {
-        match self.variables.get_mut(name.bare_name()) {
-            Some(inner_map) => inner_map.get_mut(&name.qualifier()),
-            None => None,
-        }
+        self.variables.get_mut(name)
     }
 
     //
@@ -458,29 +464,15 @@ impl SubContext {
     }
 
     fn get_variable(&self, name: &QualifiedName) -> Option<&Argument> {
-        match self.variables.get(name.bare_name()) {
-            Some(inner_map) => inner_map.get(&name.qualifier()),
-            None => None,
-        }
+        self.variables.get(name)
     }
 
     //
     // Const LValue
     //
 
-    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
-        let pos = name_node.location();
-        // subtle difference, bare name constants get their type from the value
-        let bare_name: &CaseInsensitiveString = name_node.bare_name();
-        let qualifier = name_node.qualifier();
-        let casted: Variant = do_cast(value, qualifier, pos)?;
-        // if a local constant or parameter or variable already exists throw an error
-        if self.constant_exists_no_recursion(name_node) || self.variables.contains_key(bare_name) {
-            return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
-        }
-        // set it
-        self.constants.insert(bare_name.clone(), casted);
-        Ok(())
+    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant)  {
+        self.constants.insert(name, value);
     }
 
     //
@@ -514,13 +506,12 @@ impl SubContext {
         &mut self,
         arg: &Argument,
         value: Variant,
-        pos: Location,
-    ) -> Result<()> {
+    )  {
         match arg {
             Argument::ByVal(_) => panic!("Expected variable"),
             Argument::ByRef(n) => {
                 let q = n.clone(); // clone to break duplicate borrow
-                self.set_l_value_q_parent(q, pos, value)
+                self.set_l_value_q_parent(q, value)
             }
         }
     }
@@ -561,31 +552,23 @@ impl CreateParameter for SubContext {
 }
 
 impl SetLValueQ for SubContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, pos: Location, value: Variant) -> Result<()> {
-        if self.constant_exists_no_recursion(&name) {
-            return Err(InterpreterError::new_with_pos("Duplicate definition", pos));
-        }
-
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
         // if a parameter exists, set it (might be a ref)
         match self.get_argument_mut(&name) {
             Some(a) => {
                 match a {
-                    Argument::ByVal(_) => {
-                        let casted = do_cast(value, name.qualifier(), pos)?;
-                        *a = Argument::ByVal(casted);
-                        Ok(())
+                    Argument::ByVal(_old_value) => {
+                        *a = Argument::ByVal(value.cast(name.qualifier()));
                     }
                     Argument::ByRef(n) => {
                         let q = n.clone(); // clone needed to break duplicate borrow
-                        self.set_l_value_q_parent(q, pos, value)
+                        self.set_l_value_q_parent(q, value);
                     }
                 }
             }
             None => {
                 // A parameter does not exist. Create/Update a variable.
-                let casted = do_cast(value, name.qualifier(), pos)?;
-                self.do_insert_variable(name, casted);
-                Ok(())
+                self.do_insert_variable(name, value);
             }
         }
     }
@@ -603,7 +586,7 @@ impl Context {
     pub fn push_args_context(self) -> Self {
         Self::Args(ArgsContext {
             parent: Box::new(self),
-            args: (HashMap::new(), VecDeque::new()),
+            args: (NameMap::new(), VecDeque::new()),
         })
     }
 
@@ -612,7 +595,7 @@ impl Context {
             Self::Args(a) => Self::Sub(SubContext {
                 parent: a.parent,
                 variables: a.args.0,
-                constants: HashMap::new(),
+                constants: ConstantMap::new(),
                 unnamed_args: a.args.1,
             }),
             _ => panic!("Not in an args context"),
@@ -633,10 +616,10 @@ impl Context {
         self.get_r_value_q(name_node.as_ref())
     }
 
-    pub fn set_const_l_value(&mut self, name_node: &QNameNode, value: Variant) -> Result<()> {
+    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
         match self {
-            Self::Root(r) => r.set_const_l_value(name_node, value),
-            Self::Sub(s) => s.set_const_l_value(name_node, value),
+            Self::Root(r) => r.set_const_l_value(name, value),
+            Self::Sub(s) => s.set_const_l_value(name, value),
             _ => panic!("Not allowed in an arg context"),
         }
     }
@@ -687,11 +670,11 @@ impl CreateParameter for Context {
 }
 
 impl SetLValueQ for Context {
-    fn set_l_value_q(&mut self, name: QualifiedName, pos: Location, value: Variant) -> Result<()> {
+    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant)  {
         match self {
-            Self::Root(r) => r.set_l_value_q(name, pos, value),
-            Self::Sub(s) => s.set_l_value_q(name, pos, value),
-            Self::Args(a) => a.set_l_value_q(name, pos, value),
+            Self::Root(r) => r.set_l_value_q(name, value),
+            Self::Sub(s) => s.set_l_value_q(name, value),
+            Self::Args(a) => a.set_l_value_q(name, value),
         }
     }
 }

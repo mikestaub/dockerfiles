@@ -16,7 +16,7 @@ use super::types::*;
 use crate::common::*;
 use crate::parser;
 use crate::parser::type_resolver_impl::TypeResolverImpl;
-use crate::parser::{HasQualifier, Name, NameTrait, QualifiedName, TypeQualifier, TypeResolver};
+use crate::parser::{HasQualifier, Name, NameTrait, QualifiedName, TypeQualifier, TypeResolver, Operand};
 use std::collections::{HashMap, HashSet};
 
 //
@@ -289,9 +289,15 @@ impl Converter<parser::Statement, Statement> for Linter {
                     // trying to assign to the function
                     let function_type: TypeQualifier = self.functions.get(n.bare_name()).unwrap().0;
                     if n.bare_or_eq(function_type) {
-                        // TODO check if casting is possible
-                        Ok(Statement::SetReturnValue(self.convert(e)?))
+                        let converted_expr: ExpressionNode = self.convert(e)?;
+                        let result_q: TypeQualifier = converted_expr.as_ref().try_qualifier()?;
+                        if result_q.can_cast_to(function_type) {
+                            Ok(Statement::SetReturnValue(converted_expr))
+                        } else {
+                            err_l(LinterError::TypeMismatch, &converted_expr)
+                        }
                     } else {
+                        // trying to assign to the function with an explicit wrong type
                         Err(LinterError::DuplicateDefinition.into())
                     }
                 } else if self
@@ -308,9 +314,17 @@ impl Converter<parser::Statement, Statement> for Linter {
                         // cannot overwrite local constant
                         Err(LinterError::DuplicateDefinition.into())
                     } else {
-                        // TODO check if casting is possible
-                        self.context.variables.insert(n.bare_name().clone());
-                        Ok(Statement::Assignment(self.convert(n)?, self.convert(e)?))
+                        let converted_name = self.convert(n)?;
+                        let converted_expr: ExpressionNode = self.convert(e)?;
+                        let result_q: TypeQualifier = converted_expr.as_ref().try_qualifier()?;
+                        if result_q.can_cast_to(converted_name.qualifier()) {
+                            self.context
+                                .variables
+                                .insert(converted_name.bare_name().clone());
+                            Ok(Statement::Assignment(converted_name, converted_expr))
+                        } else {
+                            err_l(LinterError::TypeMismatch, &converted_expr)
+                        }
                     }
                 }
             }
@@ -401,16 +415,43 @@ impl Converter<parser::Expression, Expression> for Linter {
                 ))
             }
             parser::Expression::BinaryExpression(op, l, r) => {
-                // TODO types match?
-                Ok(Expression::BinaryExpression(
-                    op,
-                    self.convert(l)?,
-                    self.convert(r)?,
-                ))
+                // unbox them
+                let unboxed_left = *l;
+                let unboxed_right = *r;
+                // convert them
+                let converted_left = self.convert(unboxed_left)?;
+                let converted_right = self.convert(unboxed_right)?;
+                // get the types
+                let q_left = converted_left.as_ref().try_qualifier()?;
+                let q_right = converted_right.as_ref().try_qualifier()?;
+                // can we cast from right to left?
+                let can_cast = q_right.can_cast_to(q_left);
+                // plus extra checks
+                let is_valid_op = match op {
+                    // you can't do "A" - "B"
+                    Operand::Minus => can_cast && q_left != TypeQualifier::DollarString,
+                    _ => can_cast
+                };
+                if is_valid_op {
+                    Ok(Expression::BinaryExpression(
+                        op,
+                        Box::new(converted_left),
+                        Box::new(converted_right),
+                    ))
+                } else {
+                    err_l(LinterError::TypeMismatch, &converted_right)
+                }
             }
             parser::Expression::UnaryExpression(op, c) => {
-                // TODO is it a legal op? e.g. -"hello" isn't
-                Ok(Expression::UnaryExpression(op, self.convert(c)?))
+                let unboxed_child = *c;
+                let converted_child = self.convert(unboxed_child)?;
+                let converted_q = converted_child.as_ref().try_qualifier()?;
+                if converted_q == TypeQualifier::DollarString {
+                    // no unary operation works for strings
+                    err_l(LinterError::TypeMismatch, &converted_child)
+                } else {
+                    Ok(Expression::UnaryExpression(op, Box::new(converted_child)))
+                }
             }
         }
     }

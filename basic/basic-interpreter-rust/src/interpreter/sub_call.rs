@@ -189,4 +189,49 @@ mod tests {
         "#;
         assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 9);
     }
+
+    #[test]
+    fn test_by_ref_parameter_type_mismatch() {
+        let program = "
+        DECLARE SUB Hello(N)
+        A% = 42
+        Hello A%
+        SUB Hello(N)
+            N = N + 1
+        END SUB
+        ";
+        assert_linter_err!(program, LinterError::ArgumentTypeMismatch, 4, 15);
+    }
+
+    #[test]
+    fn test_by_ref_parameter_const_is_ok_does_not_modify_const() {
+        let program = "
+        DECLARE SUB Hello(N)
+        CONST A = 42
+        Hello A%
+        PRINT A
+        SUB Hello(N)
+            PRINT N
+            N = N + 1
+            PRINT N
+        END SUB
+        ";
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["42", "43", "42"]);
+    }
+
+    #[test]
+    fn test_by_val_parameter_cast() {
+        let program = "
+        DECLARE SUB Hello(N%)
+        Hello 3.14
+        SUB Hello(N%)
+            PRINT N%
+            N% = N% + 1
+            PRINT N%
+        END SUB
+        ";
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["3", "4"]);
+    }
 }

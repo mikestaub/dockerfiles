@@ -3,6 +3,7 @@ use super::error::*;
 use super::post_conversion_linter::PostConversionLinter;
 use super::subprogram_context::SubMap;
 use super::types::*;
+use super::user_defined_function_linter::lint_call_args;
 use crate::common::*;
 
 pub struct UserDefinedSubLinter<'a> {
@@ -19,21 +20,7 @@ impl<'a> PostConversionLinter for UserDefinedSubLinter<'a> {
             Ok(())
         } else {
             match self.subs.get(name) {
-                Some((param_types, _)) => {
-                    if args.len() != param_types.len() {
-                        err_no_pos(LinterError::ArgumentCountMismatch)
-                    } else {
-                        for i in 0..args.len() {
-                            let arg_node = args.get(i).unwrap();
-                            let arg = arg_node.as_ref();
-                            let arg_q = arg.try_qualifier()?;
-                            if !arg_q.can_cast_to(param_types[i]) {
-                                return err_l(LinterError::ArgumentTypeMismatch, arg_node);
-                            }
-                        }
-                        Ok(())
-                    }
-                }
+                Some((param_types, _)) => lint_call_args(args, param_types),
                 None => err_no_pos(LinterError::SubprogramNotDefined),
             }
         }

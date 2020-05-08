@@ -10,12 +10,38 @@ pub struct UserDefinedFunctionLinter<'a> {
     pub functions: &'a FunctionMap,
 }
 
+type ExpressionNodes = Vec<ExpressionNode>;
+type TypeQualifiers = Vec<TypeQualifier>;
+type Result = std::result::Result<(), Error>;
+
+pub fn lint_call_args(args: &ExpressionNodes, param_types: &TypeQualifiers) -> Result {
+    if args.len() != param_types.len() {
+        return err_no_pos(LinterError::ArgumentCountMismatch);
+    }
+
+    for (arg_node, param_type) in args.iter().zip(param_types.iter()) {
+        let arg = arg_node.as_ref();
+        let arg_q = arg.try_qualifier()?;
+        match arg {
+            Expression::Variable(_) => {
+                // it's by ref, it needs to match exactly
+                if arg_q != *param_type {
+                    return err_l(LinterError::ArgumentTypeMismatch, arg_node);
+                }
+            }
+            _ => {
+                // it's by val, casting is allowed
+                if !arg_q.can_cast_to(*param_type) {
+                    return err_l(LinterError::ArgumentTypeMismatch, arg_node);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 impl<'a> UserDefinedFunctionLinter<'a> {
-    fn visit_function(
-        &self,
-        name: &QualifiedName,
-        args: &Vec<ExpressionNode>,
-    ) -> Result<(), Error> {
+    fn visit_function(&self, name: &QualifiedName, args: &Vec<ExpressionNode>) -> Result {
         if is_built_in_function(name.bare_name()) {
             Ok(())
         } else {
@@ -24,18 +50,8 @@ impl<'a> UserDefinedFunctionLinter<'a> {
                 Some((return_type, param_types, _)) => {
                     if *return_type != name.qualifier() {
                         err_no_pos(LinterError::TypeMismatch)
-                    } else if args.len() != param_types.len() {
-                        err_no_pos(LinterError::ArgumentCountMismatch)
                     } else {
-                        for i in 0..args.len() {
-                            let arg_node = args.get(i).unwrap();
-                            let arg = arg_node.as_ref();
-                            let arg_q = arg.try_qualifier()?;
-                            if !arg_q.can_cast_to(param_types[i]) {
-                                return err_l(LinterError::ArgumentTypeMismatch, arg_node);
-                            }
-                        }
-                        Ok(())
+                        lint_call_args(args, param_types)
                     }
                 }
                 None => self.handle_undefined_function(args),
@@ -43,7 +59,7 @@ impl<'a> UserDefinedFunctionLinter<'a> {
         }
     }
 
-    fn handle_undefined_function(&self, args: &Vec<ExpressionNode>) -> Result<(), Error> {
+    fn handle_undefined_function(&self, args: &Vec<ExpressionNode>) -> Result {
         for i in 0..args.len() {
             let arg_node = args.get(i).unwrap();
             let arg = arg_node.as_ref();
@@ -59,7 +75,7 @@ impl<'a> UserDefinedFunctionLinter<'a> {
 }
 
 impl<'a> PostConversionLinter for UserDefinedFunctionLinter<'a> {
-    fn visit_expression(&self, expr_node: &ExpressionNode) -> Result<(), Error> {
+    fn visit_expression(&self, expr_node: &ExpressionNode) -> Result {
         let pos = expr_node.location();
         let e = expr_node.as_ref();
         match e {

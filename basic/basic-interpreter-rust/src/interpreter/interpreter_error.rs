@@ -34,11 +34,6 @@ impl InterpreterError {
         }
         InterpreterError::new(self.message, new_vec)
     }
-
-    #[cfg(test)]
-    pub fn message(&self) -> &String {
-        &self.message
-    }
 }
 
 pub fn err<T, S: AsRef<str>>(msg: S, pos: Location) -> Result<T> {
@@ -55,7 +50,8 @@ mod tests {
     fn on_error_go_to_label() {
         let input = r#"
         ON ERROR GOTO ErrTrap
-        X = 1 + "oops"
+        Environ "ShouldHaveAnEqualsSignInHereSomewhere"
+        PRINT "Will not print this"
         SYSTEM
         ErrTrap:
             PRINT "Saved by the bell"

@@ -148,68 +148,6 @@ macro_rules! assert_has_variable {
     };
 }
 
-pub struct AssignmentBuilder {
-    variable_literal: String,
-    program: String,
-    qualified_variable: String,
-}
-
-impl AssignmentBuilder {
-    pub fn new(variable_literal: &str) -> AssignmentBuilder {
-        AssignmentBuilder {
-            variable_literal: variable_literal.to_owned(),
-            program: String::new(),
-            qualified_variable: variable_literal.to_owned(),
-        }
-    }
-
-    pub fn literal(&mut self, expression_literal: &str) -> &mut Self {
-        if self.program.is_empty() {
-            self.program = format!("{} = {}", self.variable_literal, expression_literal);
-            self
-        } else {
-            panic!("Cannot re-assign program")
-        }
-    }
-
-    pub fn qualified_variable(&mut self, v: &str) -> &mut Self {
-        self.qualified_variable = v.to_owned();
-        self
-    }
-
-    pub fn assert_eq<T>(&self, expected_value: T)
-    where
-        Variant: From<T>,
-    {
-        if self.program.is_empty() {
-            panic!("Program was not set")
-        } else {
-            let interpreter = interpret(&self.program);
-            let q_name = QualifiedName::try_from(self.qualified_variable.as_ref()).unwrap();
-            let q_node = q_name.at(Location::start());
-            assert_eq!(
-                interpreter.context_ref().get_r_value(&q_node).unwrap(),
-                Variant::from(expected_value)
-            );
-        }
-    }
-
-    pub fn assert_err(&self) {
-        if self.program.is_empty() {
-            panic!("Program was not set");
-        } else {
-            assert_eq!(
-                interpret_err(&self.program),
-                InterpreterError::new_with_pos("Type mismatch", Location::new(1, 1))
-            );
-        }
-    }
-}
-
-pub fn assert_assign(variable_literal: &str) -> AssignmentBuilder {
-    AssignmentBuilder::new(variable_literal)
-}
-
 pub fn assert_input<T>(
     raw_input: &str,
     variable_literal: &str,
