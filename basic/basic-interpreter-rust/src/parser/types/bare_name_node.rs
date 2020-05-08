@@ -13,10 +13,3 @@ impl NameTrait for BareName {
         None
     }
 }
-
-#[cfg(test)]
-impl PartialEq<str> for BareNameNode {
-    fn eq(&self, other: &str) -> bool {
-        self.as_ref() == other
-    }
-}

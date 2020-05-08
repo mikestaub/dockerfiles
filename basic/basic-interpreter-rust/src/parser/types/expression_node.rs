@@ -54,7 +54,7 @@ impl From<String> for Expression {
 
 impl From<&str> for Expression {
     fn from(f: &str) -> Expression {
-        Expression::StringLiteral(f.to_string())
+        f.to_string().into()
     }
 }
 

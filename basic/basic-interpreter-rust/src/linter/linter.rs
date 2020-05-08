@@ -52,17 +52,6 @@ where
     }
 }
 
-// blanket for Box
-impl<T, A, B> Converter<Box<A>, Box<B>> for T
-where
-    T: Converter<A, B>,
-{
-    fn convert(&mut self, a: Box<A>) -> Result<Box<B>, Error> {
-        let unboxed_a: A = *a;
-        self.convert(unboxed_a).map(|unboxed_b| Box::new(unboxed_b))
-    }
-}
-
 // blanket for Locatable
 impl<T, A, B> Converter<Locatable<A>, Locatable<B>> for T
 where
