@@ -10,10 +10,6 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 
-// TODO: 1. hashmap<?,Hashmap<?>> -> new class / classes in context
-// TODO: 2. context enums
-// TODO: 3. rename suprogram_resolver to linter
-
 #[derive(Debug)]
 pub struct Registers {
     a: Variant,

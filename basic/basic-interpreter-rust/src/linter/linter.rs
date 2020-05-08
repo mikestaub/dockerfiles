@@ -81,10 +81,40 @@ where
 //
 
 #[derive(Debug, Default)]
+struct VariableSet(HashMap<CaseInsensitiveString, HashSet<TypeQualifier>>);
+
+impl VariableSet {
+    pub fn insert(&mut self, name: QualifiedName) {
+        let (bare_name, qualifier) = name.consume();
+        match self.0.get_mut(&bare_name) {
+            Some(inner_set) => {
+                inner_set.insert(qualifier);
+            }
+            None => {
+                let mut inner_set: HashSet<TypeQualifier> = HashSet::new();
+                inner_set.insert(qualifier);
+                self.0.insert(bare_name, inner_set);
+            }
+        }
+    }
+
+    pub fn contains_qualified(&self, name: &QualifiedName) -> bool {
+        match self.0.get(name.bare_name()) {
+            Some(inner_set) => inner_set.contains(&name.qualifier()),
+            None => false,
+        }
+    }
+
+    pub fn contains_bare<U: NameTrait>(&self, name: &U) -> bool {
+        self.0.contains_key(name.bare_name())
+    }
+}
+
+#[derive(Debug, Default)]
 struct LinterContext {
     parent: Option<Box<LinterContext>>,
     constants: HashMap<CaseInsensitiveString, TypeQualifier>,
-    variables: HashSet<CaseInsensitiveString>,
+    variables: VariableSet,
     function_name: Option<CaseInsensitiveString>,
     sub_name: Option<CaseInsensitiveString>,
 }
@@ -243,7 +273,7 @@ impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
                 let mapped_params = self.convert(params)?;
                 self.push_function_context(mapped_name.bare_name());
                 for q_n_n in mapped_params.iter() {
-                    self.context.variables.insert(q_n_n.bare_name().clone());
+                    self.context.variables.insert(q_n_n.as_ref().clone());
                 }
                 let mapped = TopLevelToken::FunctionImplementation(FunctionImplementation {
                     name: mapped_name,
@@ -257,7 +287,7 @@ impl Converter<parser::TopLevelToken, Option<TopLevelToken>> for Linter {
                 let mapped_params = self.convert(params)?;
                 self.push_sub_context(n.bare_name());
                 for q_n_n in mapped_params.iter() {
-                    self.context.variables.insert(q_n_n.bare_name().clone());
+                    self.context.variables.insert(q_n_n.as_ref().clone());
                 }
                 let mapped = TopLevelToken::SubImplementation(SubImplementation {
                     name: n,
@@ -320,9 +350,7 @@ impl Converter<parser::Statement, Statement> for Linter {
                         let converted_expr: ExpressionNode = self.convert(e)?;
                         let result_q: TypeQualifier = converted_expr.as_ref().try_qualifier()?;
                         if result_q.can_cast_to(converted_name.qualifier()) {
-                            self.context
-                                .variables
-                                .insert(converted_name.bare_name().clone());
+                            self.context.variables.insert(converted_name.clone());
                             Ok(Statement::Assignment(converted_name, converted_expr))
                         } else {
                             err_l(LinterError::TypeMismatch, &converted_expr)
@@ -333,7 +361,7 @@ impl Converter<parser::Statement, Statement> for Linter {
             parser::Statement::While(c) => Ok(Statement::While(self.convert(c)?)),
             parser::Statement::Const(n, e) => {
                 let (name, pos) = n.consume();
-                if self.context.variables.contains(name.bare_name())
+                if self.context.variables.contains_bare(&name)
                     || self.context.constants.contains_key(name.bare_name())
                 {
                     // local variable or local constant already present by that name
@@ -387,9 +415,9 @@ impl Converter<parser::Expression, Expression> for Linter {
                     ))),
                     None => {
                         // check for an already defined local variable or parameter
-                        // TODO: type might be important, but it is ignored on the next check
-                        if self.context.variables.contains(n.bare_name()) {
-                            Ok(Expression::Variable(self.convert(n)?))
+                        let converted_name = self.convert(n.clone())?;
+                        if self.context.variables.contains_qualified(&converted_name) {
+                            Ok(Expression::Variable(converted_name))
                         } else {
                             // parent constant?
                             match self.context.get_parent_constant_type(&n)? {
@@ -399,8 +427,8 @@ impl Converter<parser::Expression, Expression> for Linter {
                                 ))),
                                 None => {
                                     // e.g. INPUT N, where N has not been declared in advance
-                                    // TODO: register N as a variable?
-                                    Ok(Expression::Variable(self.convert(n)?))
+                                    self.context.variables.insert(converted_name.clone());
+                                    Ok(Expression::Variable(converted_name))
                                 }
                             }
                         }

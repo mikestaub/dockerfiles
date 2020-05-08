@@ -47,6 +47,15 @@ mod tests {
         }
 
         #[test]
+        fn variable_already_exists_as_sub_call_param() {
+            let program = "
+            INPUT X%
+            CONST X = 1
+            ";
+            assert_linter_err!(program, LinterError::DuplicateDefinition, 3, 19);
+        }
+
+        #[test]
         fn const_already_exists() {
             let program = "
             CONST X = 32

@@ -234,4 +234,22 @@ mod tests {
         let interpreter = interpret(program);
         assert_eq!(interpreter.stdlib.output, vec!["3", "4"]);
     }
+
+    #[test]
+    fn test_by_ref_parameter_defined_in_previous_sub_call() {
+        let program = "
+        DECLARE SUB Add(N%)
+        INPUT N%
+        PRINT N%
+        Add N%
+        PRINT N%
+        SUB Add(N%)
+            N% = N% + 1
+        END SUB
+        ";
+        let mut stdlib = MockStdlib::new();
+        stdlib.add_next_input("42");
+        let interpreter = interpret_with_stdlib(program, stdlib);
+        assert_eq!(interpreter.stdlib.output, vec!["42", "43"]);
+    }
 }
