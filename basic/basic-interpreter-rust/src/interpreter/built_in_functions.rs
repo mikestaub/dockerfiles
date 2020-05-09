@@ -11,9 +11,7 @@ impl<S: Stdlib> Interpreter<S> {
             match v {
                 Variant::VString(env_var_name) => {
                     let result = self.stdlib.get_env_var(&env_var_name);
-                    self.context_mut()
-                        .demand_sub()
-                        .set_function_result(Variant::VString(result));
+                    self.function_result = Variant::VString(result);
                 }
                 _ => panic!("Type mismatch at ENVIRON$",),
             }

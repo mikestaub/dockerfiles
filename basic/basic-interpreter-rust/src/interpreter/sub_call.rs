@@ -252,4 +252,42 @@ mod tests {
         let interpreter = interpret_with_stdlib(program, stdlib);
         assert_eq!(interpreter.stdlib.output, vec!["42", "43"]);
     }
+
+    #[test]
+    fn test_by_ref_two_levels_deep() {
+        let program = "
+        N = 41
+        Sub1 N
+        PRINT N
+
+        SUB Sub1(N)
+            Sub2 N, 1
+        END SUB
+
+        SUB Sub2(N, P)
+            N = N + P
+        END SUB
+        ";
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["42"]);
+    }
+
+    #[test]
+    fn test_by_ref_two_levels_deep_referencing_parent_constant() {
+        let program = "
+        Sub1 N
+        PRINT N
+
+        SUB Sub1(N)
+            Sub2 A
+            N = A
+        END SUB
+
+        SUB Sub2(A)
+            A = 42
+        END SUB
+        ";
+        let interpreter = interpret(program);
+        assert_eq!(interpreter.stdlib.output, vec!["42"]);
+    }
 }

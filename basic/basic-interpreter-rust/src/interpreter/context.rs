@@ -5,60 +5,19 @@ use crate::linter::*;
 use crate::variant::Variant;
 use std::collections::{HashMap, VecDeque};
 
+//
+// Argument
+//
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Argument {
     ByVal(Variant),
     ByRef(QualifiedName),
 }
 
-// N = 1 (RootContext Variable N = 1)
-// Hello N, 1
-// -- Hello -> Intermediate of Root
-//             N -> ref to Root.N
-//             1 -> val
-//             replace Intermediate with SubProgram of Root
 //
-// Hello 1, Fn(1)
-// -- Hello -> Intermediate of Root
-//             1 -> val
-//             Fn -> Intermediate of Intermediate of Root
-//                  1 -> val
-//                  replace Intermediate of Intermediate of Root with Subprogram of Intermediate of Root
-//             result -> val
-//             replace Intermediate with Subprogram of Root
-
-// 1. Constants are visible inside SUBs and maybe redefined once
-// 2. Types of bare constant names are derived by the value of the expression
-//    (e.g. CONST X = 1 is an integer while X = 1 is a float)
-// 3. Variables are passed by ref to subs and functions
-// 4. Assigning a function result can be done as a bare name
-// 5. Accessing a constant of function typed but with the wrong type is an error
-// 6. It is possible to have variable A% and A$ (this is not possible for
-//    constants and function names)
-// 7. Sub names are always bare (as they do not return a value)
+// Cast
 //
-// Use cases
-// 1. LValue (e.g. X = ?, FOR X =)
-//    Must not be constant
-// 2. RValue (e.g. IF X, _ = X)
-//    Constants, arguments, variables, all allowed.
-// 3. Const LValue e.g. CONST X = 42
-//    Allow redefine (but only once) within subprogram
-//    Inherit in subprograms
-//    Read only (reassign is error)
-// 4. Const RValue e.g. CONST _ = X + 1 (where X is const)
-//    It should complain for all non const values (i.e. it should complain for
-//    function calls and names that are not const)
-// 5. Ref Parameter (?)
-//    INPUT N
-//    Push to stack as reference.
-//    If constant, push as value.
-// 6. Val Parameter (?)
-//    PRINT "hi"
-//    Push to stack as variant
-// 7. Get/Set function result
-
-// TODO review how much is needed after linter, run code coverage
 
 trait Cast {
     fn cast(self, qualifier: TypeQualifier) -> Self;
@@ -78,6 +37,10 @@ impl Cast for Argument {
         }
     }
 }
+
+//
+// NameMap
+//
 
 #[derive(Debug)]
 struct NameMap<T: std::fmt::Debug + Sized + Cast>(
@@ -118,6 +81,10 @@ impl<T: std::fmt::Debug + Sized + Cast> NameMap<T> {
     }
 }
 
+//
+// ConstantMap
+//
+
 #[derive(Debug)]
 struct ConstantMap(HashMap<CaseInsensitiveString, Variant>);
 
@@ -154,14 +121,78 @@ impl ConstantMap {
 type VariableMap = NameMap<Variant>;
 type ArgumentMap = NameMap<Argument>;
 type UnnamedArgs = VecDeque<Argument>;
+
+// TODO convert to struct and use only one data structure for both named and unnamed arguments
 type Args = (ArgumentMap, UnnamedArgs);
+
+//
+// RootContext
+//
 
 #[derive(Debug)]
 pub struct RootContext {
     variables: VariableMap,
     constants: ConstantMap,
-    function_result: Variant,
 }
+
+impl RootContext {
+    pub fn new() -> Self {
+        Self {
+            variables: NameMap::new(),
+            constants: ConstantMap::new(),
+        }
+    }
+
+    pub fn get_constant(&self, name: &QualifiedName) -> Option<Variant> {
+        self.constants.get(name).map(|x| x.clone())
+    }
+
+    pub fn get_r_value(&self, name: &QualifiedName) -> Option<Variant> {
+        // local constant?
+        match self.constants.get(name) {
+            Some(v) => Some(v.clone()),
+            None => {
+                // variable?
+                match self.variables.get(name) {
+                    Some(v) => Some(v.clone()),
+                    None => None,
+                }
+            }
+        }
+    }
+
+    pub fn set_constant(&mut self, name: QualifiedName, value: Variant) {
+        self.constants.insert(name, value);
+    }
+
+    pub fn create_parameter(&mut self, name: QualifiedName) -> Argument {
+        match self.get_constant(&name) {
+            Some(v) => Argument::ByVal(v),
+            None => {
+                match self.variables.get(&name) {
+                    // ref pointing to var
+                    Some(_) => Argument::ByRef(name),
+                    None => {
+                        // create the variable in this scope
+                        // e.g. INPUT N
+                        self.variables
+                            .insert(name.clone(), Variant::default_variant(name.qualifier()));
+                        Argument::ByRef(name)
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn set_variable(&mut self, name: QualifiedName, value: Variant) {
+        // Arguments do not exist at root level. Create/Update a variable.
+        self.variables.insert(name, value);
+    }
+}
+
+//
+// ArgsContext (collecting arguments just before a function/sub call)
+//
 
 #[derive(Debug)]
 pub struct ArgsContext {
@@ -169,227 +200,9 @@ pub struct ArgsContext {
     args: Args,
 }
 
-#[derive(Debug)]
-pub struct SubContext {
-    parent: Box<Context>,
-    variables: ArgumentMap,
-    constants: ConstantMap,
-    unnamed_args: UnnamedArgs,
-}
-
-#[derive(Debug)]
-pub enum Context {
-    Root(RootContext),
-    Sub(SubContext),
-    Args(ArgsContext),
-}
-
-trait CreateParameter {
-    fn create_parameter(&mut self, name: QualifiedName) -> Argument;
-}
-
-pub trait SetLValueQ {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant);
-}
-
-trait GetConstant {
-    fn get_constant(&self, name: &QualifiedName) -> Option<&Variant>;
-}
-
-impl GetConstant for RootContext {
-    fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        self.constants.get(name)
-    }
-}
-
-impl GetConstant for SubContext {
-    fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        self.constants.get(name)
-    }
-}
-
-impl GetConstant for Context {
-    fn get_constant(&self, name: &QualifiedName) -> Option<&Variant> {
-        match self {
-            Self::Root(r) => r.get_constant(name),
-            Self::Args(a) => a.parent.get_constant(name),
-            Self::Sub(s) => s.get_constant(name),
-        }
-    }
-}
-
-trait GetParentConstant {
-    fn get_parent_constant(&self, name: &QualifiedName) -> Option<Variant>;
-}
-
-impl GetParentConstant for RootContext {
-    fn get_parent_constant(&self, _name: &QualifiedName) -> Option<Variant> {
-        None
-    }
-}
-
-impl GetParentConstant for ArgsContext {
-    fn get_parent_constant(&self, name: &QualifiedName) -> Option<Variant> {
-        match self.parent.get_constant(name) {
-            Some(v) => Some(v.clone()),
-            None => self.parent.get_parent_constant(name),
-        }
-    }
-}
-
-impl GetParentConstant for SubContext {
-    fn get_parent_constant(&self, name: &QualifiedName) -> Option<Variant> {
-        match self.parent.get_constant(name) {
-            Some(v) => Some(v.clone()),
-            None => self.parent.get_parent_constant(name),
-        }
-    }
-}
-
-impl GetParentConstant for Context {
-    fn get_parent_constant(&self, name: &QualifiedName) -> Option<Variant> {
-        match self {
-            Self::Root(r) => r.get_parent_constant(name),
-            Self::Args(a) => a.get_parent_constant(name),
-            Self::Sub(s) => s.get_parent_constant(name),
-        }
-    }
-}
-
-trait GetRValueQualified {
-    fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant>;
-}
-
-impl GetRValueQualified for RootContext {
-    fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant> {
-        // local constant?
-        match self.constants.get(name) {
-            Some(v) => Some(v.clone()),
-            None => {
-                // variable?
-                match self.get_variable(name) {
-                    Some(v) => Some(v.clone()),
-                    None => None,
-                }
-            }
-        }
-    }
-}
-
-impl GetRValueQualified for ArgsContext {
-    fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant> {
-        self.parent.get_r_value_q(name)
-    }
-}
-
-impl GetRValueQualified for SubContext {
-    fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant> {
-        // local constant?
-        match self.get_constant(name) {
-            Some(v) => Some(v.clone()),
-            None => {
-                // variable?
-                match self.get_variable(name) {
-                    Some(v) => self.evaluate_argument(v),
-                    None => {
-                        // parent constant?
-                        self.get_parent_constant(name)
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl GetRValueQualified for Context {
-    fn get_r_value_q(&self, name: &QualifiedName) -> Option<Variant> {
-        match self {
-            Self::Root(r) => r.get_r_value_q(name),
-            Self::Args(a) => a.get_r_value_q(name),
-            Self::Sub(s) => s.get_r_value_q(name),
-        }
-    }
-}
-
-//
-// RootContext
-//
-
-impl RootContext {
-    pub fn new() -> Self {
-        Self {
-            variables: NameMap::new(),
-            constants: ConstantMap::new(),
-            function_result: Variant::VInteger(0),
-        }
-    }
-
-    //
-    // LValue (e.g. X = ?, FOR X = ?)
-    //
-
-    fn do_insert_variable(&mut self, name: QualifiedName, value: Variant) {
-        self.variables.insert(name, value);
-    }
-
-    //
-    // RValue
-    //
-
-    fn get_variable(&self, name: &QualifiedName) -> Option<&Variant> {
-        self.variables.get(name)
-    }
-
-    //
-    // Const LValue
-    //
-
-    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
-        self.constants.insert(name, value);
-    }
-}
-
-//
-// RootContext traits
-//
-
-impl CreateParameter for RootContext {
-    fn create_parameter(&mut self, name: QualifiedName) -> Argument {
-        match self.get_constant(&name) {
-            Some(v) => Argument::ByVal(v.clone()),
-            None => {
-                match self.get_variable(&name) {
-                    // ref pointing to var
-                    Some(_) => Argument::ByRef(name),
-                    None => {
-                        // create the variable in this scope
-                        // e.g. INPUT N
-                        self.do_insert_variable(
-                            name.clone(),
-                            Variant::default_variant(name.qualifier()),
-                        );
-                        Argument::ByRef(name)
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl SetLValueQ for RootContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
-        // Arguments do not exist at root level. Create/Update a variable.
-        self.do_insert_variable(name, value);
-    }
-}
-
-//
-// ArgsContext
-//
-
 impl ArgsContext {
     pub fn push_back_unnamed_ref_parameter(&mut self, name: QualifiedName) {
-        let arg = self.create_parameter(name);
+        let arg = self.parent.create_parameter(name);
         self.args.1.push_back(arg);
     }
 
@@ -398,7 +211,9 @@ impl ArgsContext {
     }
 
     pub fn set_named_ref_parameter(&mut self, named_ref_param: &NamedRefParam) {
-        let arg = self.create_parameter(named_ref_param.argument_name.clone());
+        let arg = self
+            .parent
+            .create_parameter(named_ref_param.argument_name.clone());
         self.insert_next_argument(&named_ref_param.parameter_name, arg);
     }
 
@@ -412,32 +227,20 @@ impl ArgsContext {
 }
 
 //
-// ArgsContext traits
+// SubContext (inside a function or sub)
 //
 
-impl CreateParameter for ArgsContext {
-    fn create_parameter(&mut self, name: QualifiedName) -> Argument {
-        self.parent.create_parameter(name)
-    }
+#[derive(Debug)]
+pub struct SubContext {
+    parent: Box<Context>,
+    variables: ArgumentMap,
+    constants: ConstantMap,
+    unnamed_args: UnnamedArgs,
 }
-
-impl SetLValueQ for ArgsContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
-        self.parent.set_l_value_q(name, value)
-    }
-}
-
-//
-// SubContext
-//
 
 impl SubContext {
-    //
-    // LValue (e.g. X = ?, FOR X = ?)
-    //
-
-    fn set_l_value_q_parent(&mut self, name: QualifiedName, value: Variant) {
-        self.parent.set_l_value_q(name, value)
+    fn set_variable_parent(&mut self, name: QualifiedName, value: Variant) {
+        self.parent.set_variable(name, value)
     }
 
     fn do_insert_variable(&mut self, name: QualifiedName, value: Variant) {
@@ -448,14 +251,10 @@ impl SubContext {
         self.variables.get_mut(name)
     }
 
-    //
-    // RValue
-    //
-
     fn evaluate_argument(&self, arg: &Argument) -> Option<Variant> {
         match arg {
             Argument::ByVal(v) => Some(v.clone()),
-            Argument::ByRef(n) => self.parent.get_r_value_q(n),
+            Argument::ByRef(n) => self.parent.get_r_value(n),
         }
     }
 
@@ -463,25 +262,9 @@ impl SubContext {
         self.variables.get(name)
     }
 
-    //
-    // Const LValue
-    //
-
-    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
+    pub fn set_constant(&mut self, name: QualifiedName, value: Variant) {
         self.constants.insert(name, value);
     }
-
-    //
-    // Get/Set function result
-    //
-
-    pub fn set_function_result(&mut self, v: Variant) {
-        self.parent.set_function_result(v);
-    }
-
-    //
-    // For built-in subs/functions
-    //
 
     pub fn pop_front_unnamed(&mut self) -> Variant {
         self.try_pop_front_unnamed().unwrap()
@@ -503,20 +286,14 @@ impl SubContext {
             Argument::ByVal(_) => panic!("Expected variable"),
             Argument::ByRef(n) => {
                 let q = n.clone(); // clone to break duplicate borrow
-                self.set_l_value_q_parent(q, value)
+                self.set_variable_parent(q, value)
             }
         }
     }
-}
 
-//
-// SubContext traits
-//
-
-impl CreateParameter for SubContext {
-    fn create_parameter(&mut self, name: QualifiedName) -> Argument {
+    pub fn create_parameter(&mut self, name: QualifiedName) -> Argument {
         match self.get_constant(&name) {
-            Some(v) => Argument::ByVal(v.clone()),
+            Some(v) => Argument::ByVal(v),
             None => {
                 // variable?
                 match self.get_variable(&name) {
@@ -524,8 +301,8 @@ impl CreateParameter for SubContext {
                     Some(_) => Argument::ByRef(name),
                     None => {
                         // parent constant?
-                        match self.get_parent_constant(&name) {
-                            Some(v) => Argument::ByVal(v.clone()),
+                        match self.parent.get_root().get_constant(&name) {
+                            Some(v) => Argument::ByVal(v),
                             None => {
                                 // create the variable in this scope
                                 // e.g. INPUT N
@@ -541,10 +318,8 @@ impl CreateParameter for SubContext {
             }
         }
     }
-}
 
-impl SetLValueQ for SubContext {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
+    pub fn set_variable(&mut self, name: QualifiedName, value: Variant) {
         // if a parameter exists, set it (might be a ref)
         match self.get_argument_mut(&name) {
             Some(a) => {
@@ -554,7 +329,7 @@ impl SetLValueQ for SubContext {
                     }
                     Argument::ByRef(n) => {
                         let q = n.clone(); // clone needed to break duplicate borrow
-                        self.set_l_value_q_parent(q, value);
+                        self.set_variable_parent(q, value);
                     }
                 }
             }
@@ -564,11 +339,39 @@ impl SetLValueQ for SubContext {
             }
         }
     }
+
+    pub fn get_constant(&self, name: &QualifiedName) -> Option<Variant> {
+        self.constants.get(name).map(|x| x.clone())
+    }
+
+    pub fn get_r_value(&self, name: &QualifiedName) -> Option<Variant> {
+        // local constant?
+        match self.get_constant(name) {
+            Some(v) => Some(v),
+            None => {
+                // variable?
+                match self.get_variable(name) {
+                    Some(v) => self.evaluate_argument(v),
+                    None => {
+                        // top-level constant?
+                        self.parent.get_root().get_constant(name)
+                    }
+                }
+            }
+        }
+    }
 }
 
 //
 // Context
 //
+
+#[derive(Debug)]
+pub enum Context {
+    Root(RootContext),
+    Sub(SubContext),
+    Args(ArgsContext),
+}
 
 impl Context {
     pub fn new() -> Self {
@@ -602,16 +405,10 @@ impl Context {
         }
     }
 
-    // adapter methods
-
-    pub fn get_r_value(&self, name_node: &QNameNode) -> Option<Variant> {
-        self.get_r_value_q(name_node.as_ref())
-    }
-
-    pub fn set_const_l_value(&mut self, name: QualifiedName, value: Variant) {
+    pub fn set_constant(&mut self, name: QualifiedName, value: Variant) {
         match self {
-            Self::Root(r) => r.set_const_l_value(name, value),
-            Self::Sub(s) => s.set_const_l_value(name, value),
+            Self::Root(r) => r.set_constant(name, value),
+            Self::Sub(s) => s.set_constant(name, value),
             _ => panic!("Not allowed in an arg context"),
         }
     }
@@ -630,43 +427,35 @@ impl Context {
         }
     }
 
-    pub fn set_function_result(&mut self, v: Variant) {
+    pub fn get_root(&self) -> &RootContext {
         match self {
-            Self::Root(r) => r.function_result = v,
-            Self::Args(a) => a.parent.set_function_result(v),
-            Self::Sub(s) => s.parent.set_function_result(v),
+            Self::Root(r) => r,
+            Self::Args(a) => a.parent.get_root(),
+            Self::Sub(s) => s.parent.get_root(),
         }
     }
 
-    pub fn get_function_result(&self) -> &Variant {
-        match self {
-            Self::Root(r) => &r.function_result,
-            Self::Args(a) => a.parent.get_function_result(),
-            Self::Sub(s) => s.parent.get_function_result(),
-        }
-    }
-}
-
-//
-// Context traits
-//
-
-impl CreateParameter for Context {
-    fn create_parameter(&mut self, name: QualifiedName) -> Argument {
+    pub fn create_parameter(&mut self, name: QualifiedName) -> Argument {
         match self {
             Self::Root(r) => r.create_parameter(name),
             Self::Sub(s) => s.create_parameter(name),
-            Self::Args(a) => a.create_parameter(name),
+            Self::Args(a) => a.parent.create_parameter(name),
         }
     }
-}
 
-impl SetLValueQ for Context {
-    fn set_l_value_q(&mut self, name: QualifiedName, value: Variant) {
+    pub fn set_variable(&mut self, name: QualifiedName, value: Variant) {
         match self {
-            Self::Root(r) => r.set_l_value_q(name, value),
-            Self::Sub(s) => s.set_l_value_q(name, value),
-            Self::Args(a) => a.set_l_value_q(name, value),
+            Self::Root(r) => r.set_variable(name, value),
+            Self::Sub(s) => s.set_variable(name, value),
+            Self::Args(a) => a.parent.set_variable(name, value),
+        }
+    }
+
+    pub fn get_r_value(&self, name: &QualifiedName) -> Option<Variant> {
+        match self {
+            Self::Root(r) => r.get_r_value(name),
+            Self::Args(a) => a.parent.get_r_value(name),
+            Self::Sub(s) => s.get_r_value(name),
         }
     }
 }

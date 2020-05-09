@@ -78,6 +78,7 @@ pub struct Interpreter<S: Stdlib> {
     register_stack: RegisterStack,
     return_stack: Vec<usize>,
     stacktrace: Vec<Location>,
+    pub function_result: Variant,
 }
 
 impl<TStdlib: Stdlib> Interpreter<TStdlib> {
@@ -88,6 +89,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             return_stack: vec![],
             register_stack: VecDeque::new(),
             stacktrace: vec![],
+            function_result: Variant::VInteger(0),
         };
         result.register_stack.push_back(Registers::new());
         result
@@ -137,11 +139,11 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::Store(n) => {
                 let v = self.get_a();
-                self.context_mut().set_l_value_q(n.clone(), v);
+                self.context_mut().set_variable(n.clone(), v);
             }
             Instruction::StoreConst(n) => {
                 let v = self.get_a();
-                self.context_mut().set_const_l_value(n.clone(), v);
+                self.context_mut().set_constant(n.clone(), v);
             }
             Instruction::CopyAToB => {
                 self.registers_mut().copy_a_to_b();
@@ -196,7 +198,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::CopyVarToA(n) => {
                 let name_node = n.clone().at(pos);
-                match self.context_ref().get_r_value(&name_node) {
+                match self.context_ref().get_r_value(name_node.as_ref()) {
                     Some(v) => self.set_a(v),
                     None => panic!("Variable {:?} undefined at {:?}", n, pos),
                 }
@@ -307,10 +309,10 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
             }
             Instruction::StoreAToResult => {
                 let v = self.get_a();
-                self.context_mut().demand_sub().set_function_result(v);
+                self.function_result = v;
             }
             Instruction::CopyResultToA => {
-                let v = self.context_ref().get_function_result().clone();
+                let v = self.function_result.clone();
                 self.set_a(v);
             }
             Instruction::Throw(msg) => {

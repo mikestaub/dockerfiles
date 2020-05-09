@@ -1,4 +1,3 @@
-use crate::common::*;
 use crate::instruction_generator;
 use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::{Interpreter, InterpreterError, Result, Stdlib};
@@ -17,6 +16,9 @@ where
     let program = parser.parse().unwrap();
     let linted_program = linter::lint(program).unwrap();
     let instructions = instruction_generator::generate_instructions(linted_program).unwrap();
+    // for i in instructions.iter() {
+    //     println!("{:?}", i.as_ref());
+    // }
     let mut interpreter = Interpreter::new(MockStdlib::new());
     interpreter
         .interpret(instructions)
@@ -136,8 +138,7 @@ impl Stdlib for MockStdlib {
 impl<S: Stdlib> Interpreter<S> {
     pub fn get_variable_str(&self, name: &str) -> Variant {
         let q_name = QualifiedName::try_from(name).unwrap();
-        let pos = Location::start();
-        self.context_ref().get_r_value(&q_name.at(pos)).unwrap()
+        self.context_ref().get_r_value(&q_name).unwrap()
     }
 }
 

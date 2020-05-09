@@ -2,7 +2,6 @@
 mod tests {
     use crate::assert_has_variable;
     use crate::assert_linter_err;
-    use crate::common::*;
     use crate::interpreter::context_owner::ContextOwner;
     use crate::interpreter::test_utils::*;
     use crate::linter::*;
@@ -16,9 +15,8 @@ mod tests {
             ($program:expr, $expected_variable_name:expr, $expected_value:expr) => {
                 let interpreter = interpret($program);
                 let q_name = QualifiedName::try_from($expected_variable_name).unwrap();
-                let q_node = q_name.at(Location::start());
                 assert_eq!(
-                    interpreter.context_ref().get_r_value(&q_node).unwrap(),
+                    interpreter.context_ref().get_r_value(&q_name).unwrap(),
                     Variant::from($expected_value)
                 );
             };

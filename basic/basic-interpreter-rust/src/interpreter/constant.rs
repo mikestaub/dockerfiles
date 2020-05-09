@@ -294,5 +294,25 @@ mod tests {
             let interpreter = interpret(program);
             assert_eq!(interpreter.stdlib.output, vec!["42", "100", "42"]);
         }
+
+        #[test]
+        fn nested_sub() {
+            let program = "
+            CONST X = 42
+            Sub1
+
+            SUB Sub1
+                CONST X = 3
+                PRINT X
+                Sub2
+            END SUB
+
+            SUB Sub2
+                PRINT X
+            END SUB
+            ";
+            let interpreter = interpret(program);
+            assert_eq!(interpreter.stdlib.output, vec!["3", "42"]);
+        }
     }
 }
