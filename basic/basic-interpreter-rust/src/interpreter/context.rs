@@ -15,6 +15,15 @@ pub enum Argument {
     ByRef(QualifiedName),
 }
 
+impl HasQualifier for Argument {
+    fn qualifier(&self) -> TypeQualifier {
+        match self {
+            Self::ByVal(v) => v.qualifier(),
+            Self::ByRef(r) => r.qualifier(),
+        }
+    }
+}
+
 //
 // Cast
 //
@@ -79,6 +88,13 @@ impl<T: std::fmt::Debug + Sized + Cast> NameMap<T> {
             None => None,
         }
     }
+
+    pub fn remove(&mut self, name: &QualifiedName) -> Option<T> {
+        match self.0.get_mut(name.bare_name()) {
+            Some(inner_map) => inner_map.remove(&name.qualifier()),
+            None => None,
+        }
+    }
 }
 
 //
@@ -119,11 +135,49 @@ impl ConstantMap {
 }
 
 type VariableMap = NameMap<Variant>;
-type ArgumentMap = NameMap<Argument>;
-type UnnamedArgs = VecDeque<Argument>;
 
-// TODO convert to struct and use only one data structure for both named and unnamed arguments
-type Args = (ArgumentMap, UnnamedArgs);
+#[derive(Debug)]
+struct ArgumentMap {
+    named: NameMap<Argument>,
+    name_order: VecDeque<QualifiedName>,
+}
+
+impl ArgumentMap {
+    pub fn new() -> Self {
+        Self {
+            named: NameMap::new(),
+            name_order: VecDeque::new(),
+        }
+    }
+
+    pub fn push_unnamed(&mut self, arg: Argument) {
+        let dummy_name = format!("{}", self.name_order.len());
+        self.insert(
+            QualifiedName::new(CaseInsensitiveString::new(dummy_name), arg.qualifier()),
+            arg,
+        );
+    }
+
+    pub fn insert(&mut self, name: QualifiedName, arg: Argument) {
+        self.name_order.push_back(name.clone());
+        self.named.insert(name, arg);
+    }
+
+    pub fn get_mut(&mut self, name: &QualifiedName) -> Option<&mut Argument> {
+        self.named.get_mut(name)
+    }
+
+    pub fn get(&self, name: &QualifiedName) -> Option<&Argument> {
+        self.named.get(name)
+    }
+
+    pub fn pop_front(&mut self) -> Option<Argument> {
+        match self.name_order.pop_front() {
+            Some(name) => self.named.remove(&name),
+            None => None,
+        }
+    }
+}
 
 //
 // RootContext
@@ -197,17 +251,17 @@ impl RootContext {
 #[derive(Debug)]
 pub struct ArgsContext {
     parent: Box<Context>,
-    args: Args,
+    args: ArgumentMap,
 }
 
 impl ArgsContext {
     pub fn push_back_unnamed_ref_parameter(&mut self, name: QualifiedName) {
         let arg = self.parent.create_parameter(name);
-        self.args.1.push_back(arg);
+        self.args.push_unnamed(arg);
     }
 
     pub fn push_back_unnamed_val_parameter(&mut self, value: Variant) {
-        self.args.1.push_back(Argument::ByVal(value));
+        self.args.push_unnamed(Argument::ByVal(value));
     }
 
     pub fn set_named_ref_parameter(&mut self, named_ref_param: &NamedRefParam) {
@@ -222,7 +276,7 @@ impl ArgsContext {
     }
 
     fn insert_next_argument(&mut self, param_name: &QualifiedName, arg: Argument) {
-        self.args.0.insert(param_name.clone(), arg);
+        self.args.insert(param_name.clone(), arg);
     }
 }
 
@@ -235,7 +289,6 @@ pub struct SubContext {
     parent: Box<Context>,
     variables: ArgumentMap,
     constants: ConstantMap,
-    unnamed_args: UnnamedArgs,
 }
 
 impl SubContext {
@@ -271,14 +324,14 @@ impl SubContext {
     }
 
     pub fn try_pop_front_unnamed(&mut self) -> Option<Variant> {
-        match self.unnamed_args.pop_front() {
+        match self.pop_front_unnamed_arg() {
             Some(arg) => self.evaluate_argument(&arg),
             None => None,
         }
     }
 
     pub fn pop_front_unnamed_arg(&mut self) -> Option<Argument> {
-        self.unnamed_args.pop_front()
+        self.variables.pop_front()
     }
 
     pub fn set_value_to_popped_arg(&mut self, arg: &Argument, value: Variant) {
@@ -381,7 +434,7 @@ impl Context {
     pub fn push_args_context(self) -> Self {
         Self::Args(ArgsContext {
             parent: Box::new(self),
-            args: (NameMap::new(), VecDeque::new()),
+            args: ArgumentMap::new(),
         })
     }
 
@@ -389,9 +442,8 @@ impl Context {
         match self {
             Self::Args(a) => Self::Sub(SubContext {
                 parent: a.parent,
-                variables: a.args.0,
+                variables: a.args,
                 constants: ConstantMap::new(),
-                unnamed_args: a.args.1,
             }),
             _ => panic!("Not in an args context"),
         }
