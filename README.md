@@ -4,6 +4,9 @@
 
 [![Build Status](https://travis-ci.org/ngeor/dockerfiles.svg?branch=master)](https://travis-ci.org/ngeor/dockerfiles)
 
+**Warning** I am not currently using any of the images listed below, so they
+are most likely not maintained.
+
 ## Images
 
 | Image                           | Base image                  | Main features                    | Extra                                                     | Pulls                                                                                        |
