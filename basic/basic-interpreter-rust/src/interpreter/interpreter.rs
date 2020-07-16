@@ -423,19 +423,20 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
 #[cfg(test)]
 mod tests {
     use super::super::test_utils::*;
+    use crate::assert_prints;
     use crate::interpreter::stdlib::DefaultStdlib;
     use crate::interpreter::Interpreter;
 
     #[test]
     fn test_interpret_print_hello_world_one_arg() {
         let input = "PRINT \"Hello, world!\"";
-        assert_eq!(interpret(input).stdlib.output, vec!["Hello, world!"]);
+        assert_prints!(input, "Hello, world!");
     }
 
     #[test]
     fn test_interpret_print_hello_world_two_args() {
         let input = r#"PRINT "Hello", "world!""#;
-        assert_eq!(interpret(input).stdlib.output, vec!["Hello world!"]);
+        assert_prints!(input, "Hello world!");
     }
 
     #[test]
@@ -446,7 +447,7 @@ mod tests {
             Test = N + 1
         END FUNCTION
         "#;
-        assert_eq!(interpret(input).stdlib.output, vec!["Hello 2"]);
+        assert_prints!(input, "Hello 2");
     }
 
     #[test]

@@ -2,9 +2,9 @@
 mod tests {
     use crate::assert_has_variable;
     use crate::assert_linter_err;
+    use crate::assert_prints;
     use crate::interpreter::test_utils::*;
     use crate::linter::LinterError;
-    use crate::variant::Variant;
 
     #[test]
     fn test_literals() {
@@ -71,8 +71,7 @@ mod tests {
                 Sum = A + B
             END FUNCTION
             "#;
-            let interpreter = interpret(program);
-            assert_eq!(interpreter.stdlib.output, vec!["4"]);
+            assert_prints!(program, "4");
         }
 
         #[test]
@@ -86,8 +85,7 @@ mod tests {
                 Sum = A + B
             END FUNCTION
             "#;
-            let interpreter = interpret(program);
-            assert_eq!(interpreter.stdlib.output, vec!["4"]);
+            assert_prints!(program, "4");
         }
     }
 
@@ -385,6 +383,12 @@ mod tests {
             assert_condition_false!("-1 AND 0");
             assert_condition_false!("0 AND -1");
             assert_condition_false!("0 AND 0");
+        }
+
+        #[test]
+        fn test_and_binary_arithmetic_positive() {
+            assert_prints!("PRINT 5 AND 2", "0");
+            assert_prints!("PRINT 5 AND 1", "1");
         }
 
         // TODO bitwise arithmetic e.g. 5 AND 1 == 0
