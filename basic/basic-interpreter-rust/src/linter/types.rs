@@ -174,7 +174,10 @@ impl Expression {
                         | Operand::LessOrEqual
                         | Operand::Equal
                         | Operand::GreaterOrEqual
-                        | Operand::Greater => Ok(TypeQualifier::PercentInteger),
+                        | Operand::Greater
+                        | Operand::NotEqual
+                        | Operand::And
+                        | Operand::Or => Ok(TypeQualifier::PercentInteger),
                     }
                 } else {
                     err(LinterError::TypeMismatch, r.as_ref().location())

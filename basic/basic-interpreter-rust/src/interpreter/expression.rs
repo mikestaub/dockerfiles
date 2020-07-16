@@ -367,4 +367,50 @@ mod tests {
             assert_condition!("9 <= 19.1#");
         }
     }
+
+    mod and {
+        use super::*;
+
+        #[test]
+        fn test_and_positive_ones_zeroes() {
+            assert_condition!("1 AND 1");
+            assert_condition_false!("1 AND 0");
+            assert_condition_false!("0 AND 1");
+            assert_condition_false!("0 AND 0");
+        }
+
+        #[test]
+        fn test_and_negative_ones_zeroes() {
+            assert_condition!("-1 AND -1");
+            assert_condition_false!("-1 AND 0");
+            assert_condition_false!("0 AND -1");
+            assert_condition_false!("0 AND 0");
+        }
+
+        // TODO bitwise arithmetic e.g. 5 AND 1 == 0
+        // TODO priority over +-<>
+        // TODO priority of AND over OR
+        // TODO linter for strings
+        // TODO bitwise arithmetic for negative numbers
+    }
+
+    mod or {
+        use super::*;
+
+        #[test]
+        fn test_or_positive_ones_zeroes() {
+            assert_condition!("1 OR 1");
+            assert_condition!("1 OR 0");
+            assert_condition!("0 OR 1");
+            assert_condition_false!("0 OR 0");
+        }
+
+        #[test]
+        fn test_or_negative_ones_zeroes() {
+            assert_condition!("-1 OR -1");
+            assert_condition!("-1 OR 0");
+            assert_condition!("0 OR -1");
+            assert_condition_false!("0 OR 0");
+        }
+    }
 }

@@ -49,6 +49,9 @@ impl InstructionGenerator {
                     Operand::Equal => self.push(Instruction::Equal, pos),
                     Operand::GreaterOrEqual => self.push(Instruction::GreaterOrEqual, pos),
                     Operand::Greater => self.push(Instruction::Greater, pos),
+                    Operand::NotEqual => self.push(Instruction::NotEqual, pos),
+                    Operand::And => self.push(Instruction::And, pos),
+                    Operand::Or => self.push(Instruction::Or, pos),
                 }
                 self.push(Instruction::PopRegisters, pos);
             }

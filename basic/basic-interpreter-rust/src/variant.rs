@@ -210,6 +210,34 @@ impl Variant {
         }
     }
 
+    pub fn and(&self, other: &Self) -> Result<Self, String> {
+        match self {
+            Variant::VInteger(a) => match other {
+                Variant::VInteger(b) => {
+                    let x: i32 = *a;
+                    let y: i32 = *b;
+                    Ok(Variant::VInteger(x & y))
+                }
+                _ => Err("Type mismatch".to_string()),
+            },
+            _ => Err("Type mismatch".to_string()),
+        }
+    }
+
+    pub fn or(&self, other: &Self) -> Result<Self, String> {
+        match self {
+            Variant::VInteger(a) => match other {
+                Variant::VInteger(b) => {
+                    let x: i32 = *a;
+                    let y: i32 = *b;
+                    Ok(Variant::VInteger(x | y))
+                }
+                _ => Err("Type mismatch".to_string()),
+            },
+            _ => Err("Type mismatch".to_string()),
+        }
+    }
+
     pub fn default_variant(type_qualifier: TypeQualifier) -> Variant {
         match type_qualifier {
             TypeQualifier::BangSingle => Variant::VSingle(0.0),

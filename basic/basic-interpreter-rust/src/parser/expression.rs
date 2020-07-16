@@ -40,7 +40,7 @@ impl<T: BufRead> Parser<T> {
             LexemeNode::Keyword(Keyword::Not, _, not_pos) => {
                 self.read_demand_whitespace("Expected whitespace after NOT")?;
                 let child = self.read_demand_expression()?;
-                Ok(Expression::UnaryExpression(UnaryOperand::Not, Box::new(child)).at(not_pos))
+                Ok(Self::apply_not_priority_order(child, not_pos))
             }
             LexemeNode::Symbol('(', pos) => {
                 let inner = self.read_demand_expression_skipping_whitespace()?;
@@ -86,7 +86,8 @@ impl<T: BufRead> Parser<T> {
     ) -> ExpressionNode {
         match right_side.as_ref() {
             Expression::BinaryExpression(r_op, r_left, r_right) => {
-                let should_flip = op == Operand::Plus && *r_op == Operand::Less;
+                let should_flip = op.is_arithmetic() && r_op.is_relational()
+                    || op.is_relational() && r_op.is_binary();
                 if should_flip {
                     Expression::BinaryExpression(
                         *r_op,
@@ -105,6 +106,28 @@ impl<T: BufRead> Parser<T> {
             _ => {
                 Expression::BinaryExpression(op, Box::new(left_side), Box::new(right_side)).at(pos)
             }
+        }
+    }
+
+    fn apply_not_priority_order(child: ExpressionNode, not_pos: Location) -> ExpressionNode {
+        match child.as_ref() {
+            Expression::BinaryExpression(r_op, r_left, r_right) => {
+                let should_flip = r_op.is_binary();
+                if should_flip {
+                    Expression::BinaryExpression(
+                        *r_op,
+                        Box::new(
+                            Expression::UnaryExpression(UnaryOperand::Not, r_left.clone())
+                                .at(not_pos),
+                        ),
+                        r_right.clone(),
+                    )
+                    .at(child.location())
+                } else {
+                    Expression::UnaryExpression(UnaryOperand::Not, Box::new(child)).at(not_pos)
+                }
+            }
+            _ => Expression::UnaryExpression(UnaryOperand::Not, Box::new(child)).at(not_pos),
         }
     }
 
@@ -239,9 +262,17 @@ impl<T: BufRead> Parser<T> {
         // in case there is a next call that will be demanding for it
         let (opt_space, next) = self.read_preserve_whitespace()?;
         match next {
-            LexemeNode::Symbol('<', pos) => Ok(Some((self.less_or_lte()?, pos))),
+            LexemeNode::Symbol('<', pos) => Ok(Some((self.less_or_lte_or_ne()?, pos))),
+            LexemeNode::Symbol('>', pos) => Ok(Some((self.greater_or_gte()?, pos))),
+            LexemeNode::Symbol('=', pos) => Ok(Some((Operand::Equal, pos))), // TODO test
             LexemeNode::Symbol('+', pos) => Ok(Some((Operand::Plus, pos))),
             LexemeNode::Symbol('-', pos) => Ok(Some((Operand::Minus, pos))),
+            LexemeNode::Keyword(Keyword::And, _, pos) => {
+                // TODO test that leading space is mandatory but not if parenthesis was provided
+                // TODO test that trailing space post AND is mandatory but not if parenthesis will be provided
+                Ok(Some((Operand::And, pos)))
+            }
+            LexemeNode::Keyword(Keyword::Or, _, pos) => Ok(Some((Operand::Or, pos))),
             _ => {
                 self.buf_lexer.undo(next);
                 match opt_space {
@@ -253,14 +284,26 @@ impl<T: BufRead> Parser<T> {
         }
     }
 
-    fn less_or_lte(&mut self) -> Result<Operand, ParserError> {
+    fn less_or_lte_or_ne(&mut self) -> Result<Operand, ParserError> {
+        let next = self.buf_lexer.read()?;
+        match next {
+            LexemeNode::Symbol('=', _) => Ok(Operand::LessOrEqual),
+            LexemeNode::Symbol('>', _) => Ok(Operand::NotEqual), // TODO test
+            _ => {
+                self.buf_lexer.undo(next);
+                Ok(Operand::Less)
+            }
+        }
+    }
+
+    fn greater_or_gte(&mut self) -> Result<Operand, ParserError> {
         self.buf_lexer
             .skip_if(|lexeme| lexeme.is_symbol('='))
             .map(|found_equal_sign| {
                 if found_equal_sign {
-                    Operand::LessOrEqual
+                    Operand::GreaterOrEqual
                 } else {
-                    Operand::Less
+                    Operand::Greater
                 }
             })
     }
@@ -493,6 +536,63 @@ mod tests {
                         .at_rc(1, 7)
                     ),
                     Box::new("C".as_var_expr(1, 17)),
+                )
+            );
+        }
+
+        #[test]
+        fn test_a_gt_0_and_b_lt_1() {
+            assert_expression!(
+                "A > 0 AND B < 1",
+                Expression::BinaryExpression(
+                    Operand::And,
+                    Box::new(
+                        Expression::BinaryExpression(
+                            Operand::Greater,
+                            Box::new("A".as_var_expr(1, 7)),
+                            Box::new(0.as_lit_expr(1, 11)),
+                        )
+                        .at_rc(1, 9)
+                    ),
+                    Box::new(
+                        Expression::BinaryExpression(
+                            Operand::Less,
+                            Box::new("B".as_var_expr(1, 17)),
+                            Box::new(1.as_lit_expr(1, 21)),
+                        )
+                        .at_rc(1, 19)
+                    )
+                )
+            );
+        }
+
+        #[test]
+        fn test_not_eof_1_and_id_gt_0() {
+            assert_expression!(
+                "NOT EOF(1) AND ID > 0",
+                Expression::BinaryExpression(
+                    Operand::And,
+                    Box::new(
+                        Expression::UnaryExpression(
+                            UnaryOperand::Not,
+                            Box::new(
+                                Expression::FunctionCall(
+                                    Name::from("EOF"),
+                                    vec![1.as_lit_expr(1, 15)]
+                                )
+                                .at_rc(1, 11)
+                            )
+                        )
+                        .at_rc(1, 7)
+                    ),
+                    Box::new(
+                        Expression::BinaryExpression(
+                            Operand::Greater,
+                            Box::new("ID".as_var_expr(1, 22)),
+                            Box::new(0.as_lit_expr(1, 27))
+                        )
+                        .at_rc(1, 25)
+                    )
                 )
             );
         }

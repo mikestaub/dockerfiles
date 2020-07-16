@@ -219,6 +219,15 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 let is_true = order == Ordering::Equal;
                 self.set_a(is_true.into());
             }
+            Instruction::NotEqual => {
+                let a = self.get_a();
+                let b = self.get_b();
+                let order = a
+                    .cmp(&b)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                let is_true = order != Ordering::Equal;
+                self.set_a(is_true.into());
+            }
             Instruction::Less => {
                 let a = self.get_a();
                 let b = self.get_b();
@@ -254,6 +263,22 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                     .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 let is_true = order == Ordering::Greater || order == Ordering::Equal;
                 self.set_a(is_true.into());
+            }
+            Instruction::And => {
+                let a = self.get_a();
+                let b = self.get_b();
+                self.set_a(
+                    a.and(&b)
+                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
+                );
+            }
+            Instruction::Or => {
+                let a = self.get_a();
+                let b = self.get_b();
+                self.set_a(
+                    a.or(&b)
+                        .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
+                );
             }
             Instruction::JumpIfFalse(resolved_idx) => {
                 let a = self.get_a();
