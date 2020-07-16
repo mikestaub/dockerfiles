@@ -22,6 +22,7 @@ impl<T: BufRead> Parser<T> {
     pub fn demand_expression(&mut self, next: LexemeNode) -> Result<ExpressionNode, ParserError> {
         let first = self.demand_single_expression(next)?;
         self.try_parse_second_expression(first)
+            .map(|x| x.simplify_unary_minus_literals())
     }
 
     fn demand_single_expression(
@@ -35,12 +36,20 @@ impl<T: BufRead> Parser<T> {
             LexemeNode::Symbol('.', pos) => self.parse_floating_point_literal("0".to_string(), pos),
             LexemeNode::Symbol('-', minus_pos) => {
                 let child = self.read_demand_expression()?;
-                Ok(Expression::unary_minus(child).at(minus_pos))
+                Ok(Self::apply_unary_priority_order(
+                    child,
+                    UnaryOperand::Minus,
+                    minus_pos,
+                ))
             }
             LexemeNode::Keyword(Keyword::Not, _, not_pos) => {
                 self.read_demand_whitespace("Expected whitespace after NOT")?;
                 let child = self.read_demand_expression()?;
-                Ok(Self::apply_not_priority_order(child, not_pos))
+                Ok(Self::apply_unary_priority_order(
+                    child,
+                    UnaryOperand::Not,
+                    not_pos,
+                ))
             }
             LexemeNode::Symbol('(', pos) => {
                 let inner = self.read_demand_expression_skipping_whitespace()?;
@@ -109,25 +118,26 @@ impl<T: BufRead> Parser<T> {
         }
     }
 
-    fn apply_not_priority_order(child: ExpressionNode, not_pos: Location) -> ExpressionNode {
+    fn apply_unary_priority_order(
+        child: ExpressionNode,
+        op: UnaryOperand,
+        pos: Location,
+    ) -> ExpressionNode {
         match child.as_ref() {
             Expression::BinaryExpression(r_op, r_left, r_right) => {
-                let should_flip = r_op.is_binary();
+                let should_flip = op == UnaryOperand::Minus || r_op.is_binary();
                 if should_flip {
                     Expression::BinaryExpression(
                         *r_op,
-                        Box::new(
-                            Expression::UnaryExpression(UnaryOperand::Not, r_left.clone())
-                                .at(not_pos),
-                        ),
+                        Box::new(Expression::UnaryExpression(op, r_left.clone()).at(pos)),
                         r_right.clone(),
                     )
                     .at(child.location())
                 } else {
-                    Expression::UnaryExpression(UnaryOperand::Not, Box::new(child)).at(not_pos)
+                    Expression::UnaryExpression(op, Box::new(child)).at(pos)
                 }
             }
-            _ => Expression::UnaryExpression(UnaryOperand::Not, Box::new(child)).at(not_pos),
+            _ => Expression::UnaryExpression(op, Box::new(child)).at(pos),
         }
     }
 
@@ -593,6 +603,42 @@ mod tests {
                         )
                         .at_rc(1, 25)
                     )
+                )
+            );
+        }
+
+        #[test]
+        fn test_negated_number_and_positive_number() {
+            assert_expression!(
+                "-5 AND 2",
+                Expression::BinaryExpression(
+                    Operand::And,
+                    Box::new((-5_i32).as_lit_expr(1, 7)),
+                    Box::new(2.as_lit_expr(1, 14))
+                )
+            );
+        }
+
+        #[test]
+        fn test_negated_number_plus_positive_number() {
+            assert_expression!(
+                "-5 + 2",
+                Expression::BinaryExpression(
+                    Operand::Plus,
+                    Box::new((-5_i32).as_lit_expr(1, 7)),
+                    Box::new(2.as_lit_expr(1, 12))
+                )
+            );
+        }
+
+        #[test]
+        fn test_negated_number_lt_positive_number() {
+            assert_expression!(
+                "-5 < 2",
+                Expression::BinaryExpression(
+                    Operand::Less,
+                    Box::new((-5_i32).as_lit_expr(1, 7)),
+                    Box::new(2.as_lit_expr(1, 12))
                 )
             );
         }

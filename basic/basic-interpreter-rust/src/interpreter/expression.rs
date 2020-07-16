@@ -386,9 +386,28 @@ mod tests {
         }
 
         #[test]
-        fn test_and_binary_arithmetic_positive() {
+        fn test_and_binary_arithmetic_positive_positive() {
             assert_prints!("PRINT 5 AND 2", "0");
             assert_prints!("PRINT 5 AND 1", "1");
+            assert_prints!("PRINT 1 AND 1", "1");
+            assert_prints!("PRINT 7 AND 1", "1");
+            assert_prints!("PRINT 7 AND 2", "2");
+            assert_prints!("PRINT 7 AND 6", "6");
+            assert_prints!("PRINT 6 AND 7", "6");
+        }
+
+        #[test]
+        fn test_and_binary_arithmetic_positive_negative() {
+            assert_prints!("PRINT 5 AND -2", "4");
+            assert_prints!("PRINT -5 AND 2", "2");
+            assert_prints!("PRINT 5 AND -1", "5");
+            assert_prints!("PRINT -5 AND 1", "1");
+        }
+
+        #[test]
+        fn test_and_binary_arithmetic_negative_negative() {
+            assert_prints!("PRINT -5 AND -2", "-6");
+            assert_prints!("PRINT -5 AND -1", "-5");
         }
 
         // TODO bitwise arithmetic e.g. 5 AND 1 == 0

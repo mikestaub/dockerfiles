@@ -1,5 +1,5 @@
 use super::Name;
-use crate::common::{FileHandle, Locatable};
+use crate::common::{AtLocation, FileHandle, Locatable};
 use crate::variant;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -113,11 +113,7 @@ impl From<i64> for Expression {
 }
 
 impl Expression {
-    pub fn unary(operand: UnaryOperand, child: ExpressionNode) -> Self {
-        Self::UnaryExpression(operand, Box::new(child))
-    }
-
-    pub fn unary_minus(child: ExpressionNode) -> Self {
+    fn unary_minus(child: ExpressionNode) -> Self {
         match child.as_ref() {
             Self::SingleLiteral(n) => Self::SingleLiteral(-n),
             Self::DoubleLiteral(n) => Self::DoubleLiteral(-n),
@@ -135,7 +131,49 @@ impl Expression {
                     Self::LongLiteral(-n)
                 }
             }
-            _ => Self::unary(UnaryOperand::Minus, child),
+            _ => Self::UnaryExpression(
+                UnaryOperand::Minus,
+                Box::new(child.simplify_unary_minus_literals()),
+            ),
         }
+    }
+
+    pub fn simplify_unary_minus_literals(self) -> Self {
+        match self {
+            Self::UnaryExpression(op, child) => {
+                let x: ExpressionNode = *child;
+                match op {
+                    UnaryOperand::Minus => Self::unary_minus(x),
+                    _ => Self::UnaryExpression(op, Box::new(x.simplify_unary_minus_literals())),
+                }
+            }
+            Self::BinaryExpression(op, left, right) => {
+                let x: ExpressionNode = *left;
+                let y: ExpressionNode = *right;
+                Self::BinaryExpression(
+                    op,
+                    Box::new(x.simplify_unary_minus_literals()),
+                    Box::new(y.simplify_unary_minus_literals()),
+                )
+            }
+            Self::Parenthesis(child) => {
+                let x: ExpressionNode = *child;
+                Self::Parenthesis(Box::new(x.simplify_unary_minus_literals()))
+            }
+            Self::FunctionCall(name, args) => Self::FunctionCall(
+                name,
+                args.into_iter()
+                    .map(|x| x.simplify_unary_minus_literals())
+                    .collect(),
+            ),
+            _ => self,
+        }
+    }
+}
+
+impl ExpressionNode {
+    pub fn simplify_unary_minus_literals(self) -> Self {
+        let (x, pos) = self.consume();
+        x.simplify_unary_minus_literals().at(pos)
     }
 }
