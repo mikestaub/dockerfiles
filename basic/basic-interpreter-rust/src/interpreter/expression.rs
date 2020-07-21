@@ -410,7 +410,25 @@ mod tests {
             assert_prints!("PRINT -5 AND -1", "-5");
         }
 
-        // TODO linter for strings
+        #[test]
+        fn test_and_linter_error_for_strings() {
+            assert_linter_err!(r#"PRINT 1 AND "hello""#, LinterError::TypeMismatch, 1, 13);
+            assert_linter_err!(r#"PRINT "hello" AND 1"#, LinterError::TypeMismatch, 1, 19);
+            assert_linter_err!(
+                r#"PRINT "hello" AND "bye""#,
+                LinterError::TypeMismatch,
+                1,
+                19
+            );
+        }
+
+        #[test]
+        fn test_and_linter_error_for_file_handle() {
+            assert_linter_err!(r#"PRINT 1 AND #1"#, LinterError::TypeMismatch, 1, 13);
+            assert_linter_err!(r#"PRINT #1 AND 1"#, LinterError::TypeMismatch, 1, 7);
+            assert_linter_err!(r#"PRINT #1 AND #1"#, LinterError::TypeMismatch, 1, 7);
+        }
+
         // TODO bitwise shortcircuit?
     }
 
