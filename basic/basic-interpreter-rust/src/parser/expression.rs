@@ -95,7 +95,7 @@ impl<T: BufRead> Parser<T> {
     ) -> ExpressionNode {
         match right_side.as_ref() {
             Expression::BinaryExpression(r_op, r_left, r_right) => {
-                let should_flip = op.is_arithmetic() && r_op.is_relational()
+                let should_flip = op.is_arithmetic() && (r_op.is_relational() || r_op.is_binary())
                     || op.is_relational() && r_op.is_binary()
                     || op == Operand::And && *r_op == Operand::Or;
                 if should_flip {

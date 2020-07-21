@@ -410,9 +410,7 @@ mod tests {
             assert_prints!("PRINT -5 AND -1", "-5");
         }
 
-        // TODO priority over +-<>
         // TODO linter for strings
-        // TODO bitwise arithmetic for negative numbers
         // TODO bitwise shortcircuit?
     }
 
@@ -444,9 +442,13 @@ mod tests {
             assert_prints!("PRINT -1 OR 0", "-1");
             assert_prints!("PRINT -1 OR 1", "-1");
         }
+    }
+
+    mod priority {
+        use super::*;
 
         #[test]
-        fn test_and_or_priority() {
+        fn test_and_has_priority_over_or() {
             assert_prints!("PRINT 1 OR 1 AND 0", "1");
             assert_prints!("PRINT 1 OR (1 AND 0)", "1");
             assert_prints!("PRINT (1 OR 1) AND 0", "0");
@@ -458,6 +460,26 @@ mod tests {
             assert_prints!("PRINT 0 AND 0 OR 1", "1");
             assert_prints!("PRINT (0 AND 0) OR 1", "1");
             assert_prints!("PRINT 0 AND (0 OR 1)", "0");
+        }
+
+        #[test]
+        fn test_relational_has_priority_over_binary() {
+            assert_prints!("PRINT 1 OR 2 > 1 AND 2", "3");
+            assert_prints!("PRINT 1 OR (2 > 1) AND 2", "3");
+            assert_prints!("PRINT 1 OR ((2 > 1) AND 2)", "3");
+            assert_prints!("PRINT (1 OR 2) > (1 AND 2)", "-1");
+        }
+
+        #[test]
+        fn test_arithmetic_has_priority_over_relational() {
+            assert_prints!("PRINT 1 + 1 > 2", "0");
+            assert_prints!("PRINT 1 + (1 > 2)", "1");
+        }
+
+        #[test]
+        fn test_arithmetic_has_priority_over_binary() {
+            assert_prints!("PRINT 1 + 2 OR 1", "3");
+            assert_prints!("PRINT 1 + (2 OR 1)", "4");
         }
     }
 }
