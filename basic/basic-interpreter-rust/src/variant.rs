@@ -212,34 +212,26 @@ impl Variant {
         }
     }
 
-    pub fn and(&self, other: &Self) -> Result<Self, String> {
+    pub fn and(self, other: Self) -> Result<Self, String> {
         match self {
             Variant::VInteger(a) => match other {
-                Variant::VInteger(b) => {
-                    let x: i32 = *a;
-                    let y: i32 = *b;
-                    Ok(Variant::VInteger(from_bits(and_bits(
-                        to_bits(x),
-                        to_bits(y),
-                    ))))
-                }
+                Variant::VInteger(b) => Ok(Variant::VInteger(from_bits(and_bits(
+                    to_bits(a),
+                    to_bits(b),
+                )))),
                 _ => Err("Type mismatch".to_string()),
             },
             _ => Err("Type mismatch".to_string()),
         }
     }
 
-    pub fn or(&self, other: &Self) -> Result<Self, String> {
+    pub fn or(self, other: Self) -> Result<Self, String> {
         match self {
             Variant::VInteger(a) => match other {
-                Variant::VInteger(b) => {
-                    let x: i32 = *a;
-                    let y: i32 = *b;
-                    Ok(Variant::VInteger(from_bits(or_bits(
-                        to_bits(x),
-                        to_bits(y),
-                    ))))
-                }
+                Variant::VInteger(b) => Ok(Variant::VInteger(from_bits(or_bits(
+                    to_bits(a),
+                    to_bits(b),
+                )))),
                 _ => Err("Type mismatch".to_string()),
             },
             _ => Err("Type mismatch".to_string()),

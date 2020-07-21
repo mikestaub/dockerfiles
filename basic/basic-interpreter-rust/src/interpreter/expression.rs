@@ -428,8 +428,6 @@ mod tests {
             assert_linter_err!(r#"PRINT #1 AND 1"#, LinterError::TypeMismatch, 1, 7);
             assert_linter_err!(r#"PRINT #1 AND #1"#, LinterError::TypeMismatch, 1, 7);
         }
-
-        // TODO bitwise shortcircuit?
     }
 
     mod or {
@@ -498,6 +496,21 @@ mod tests {
         fn test_arithmetic_has_priority_over_binary() {
             assert_prints!("PRINT 1 + 2 OR 1", "3");
             assert_prints!("PRINT 1 + (2 OR 1)", "4");
+        }
+
+        #[test]
+        fn test_binary_not_short_circuit() {
+            let program = r#"
+            DECLARE FUNCTION Echo(X)
+
+            PRINT Echo(1) OR Echo(0)
+
+            FUNCTION Echo(X)
+                PRINT X
+                Echo = X
+            END FUNCTION
+            "#;
+            assert_prints!(program, "1", "0", "1");
         }
     }
 }

@@ -5,6 +5,8 @@ use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::io::FileManager;
 use crate::interpreter::{InterpreterError, Result, Stdlib};
 
+use crate::casting::cast;
+use crate::parser::TypeQualifier;
 use crate::variant::Variant;
 
 use std::cmp::Ordering;
@@ -265,18 +267,22 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 self.set_a(is_true.into());
             }
             Instruction::And => {
-                let a = self.get_a();
-                let b = self.get_b();
+                let a = cast(self.get_a(), TypeQualifier::PercentInteger)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                let b = cast(self.get_b(), TypeQualifier::PercentInteger)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 self.set_a(
-                    a.and(&b)
+                    a.and(b)
                         .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
                 );
             }
             Instruction::Or => {
-                let a = self.get_a();
-                let b = self.get_b();
+                let a = cast(self.get_a(), TypeQualifier::PercentInteger)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                let b = cast(self.get_b(), TypeQualifier::PercentInteger)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 self.set_a(
-                    a.or(&b)
+                    a.or(b)
                         .map_err(|e| InterpreterError::new_with_pos(e, pos))?,
                 );
             }
