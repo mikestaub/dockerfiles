@@ -410,11 +410,10 @@ mod tests {
             assert_prints!("PRINT -5 AND -1", "-5");
         }
 
-        // TODO bitwise arithmetic e.g. 5 AND 1 == 0
         // TODO priority over +-<>
-        // TODO priority of AND over OR
         // TODO linter for strings
         // TODO bitwise arithmetic for negative numbers
+        // TODO bitwise shortcircuit?
     }
 
     mod or {
@@ -434,6 +433,31 @@ mod tests {
             assert_condition!("-1 OR 0");
             assert_condition!("0 OR -1");
             assert_condition_false!("0 OR 0");
+        }
+
+        #[test]
+        fn test_or_binary_arithmetic() {
+            assert_prints!("PRINT 1 OR 1", "1");
+            assert_prints!("PRINT 1 OR 0", "1");
+            assert_prints!("PRINT 1 OR 2", "3");
+            assert_prints!("PRINT -1 OR -1", "-1");
+            assert_prints!("PRINT -1 OR 0", "-1");
+            assert_prints!("PRINT -1 OR 1", "-1");
+        }
+
+        #[test]
+        fn test_and_or_priority() {
+            assert_prints!("PRINT 1 OR 1 AND 0", "1");
+            assert_prints!("PRINT 1 OR (1 AND 0)", "1");
+            assert_prints!("PRINT (1 OR 1) AND 0", "0");
+
+            assert_prints!("PRINT 1 OR 0 AND 0", "1");
+            assert_prints!("PRINT 1 OR (0 AND 0)", "1");
+            assert_prints!("PRINT (1 OR 0) AND 0", "0");
+
+            assert_prints!("PRINT 0 AND 0 OR 1", "1");
+            assert_prints!("PRINT (0 AND 0) OR 1", "1");
+            assert_prints!("PRINT 0 AND (0 OR 1)", "0");
         }
     }
 }
