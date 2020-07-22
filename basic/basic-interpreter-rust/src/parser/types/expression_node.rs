@@ -169,11 +169,22 @@ impl Expression {
             _ => self,
         }
     }
+
+    pub fn is_parenthesis(&self) -> bool {
+        match self {
+            Self::Parenthesis(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl ExpressionNode {
     pub fn simplify_unary_minus_literals(self) -> Self {
         let (x, pos) = self.consume();
         x.simplify_unary_minus_literals().at(pos)
+    }
+
+    pub fn is_parenthesis(&self) -> bool {
+        self.as_ref().is_parenthesis()
     }
 }

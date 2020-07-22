@@ -1,5 +1,6 @@
 use crate::common::*;
 use crate::lexer::{Keyword, LexemeNode};
+use crate::parser::buf_lexer::BufLexerUndo;
 use crate::parser::{
     unexpected, Expression, ExpressionNode, Name, Operand, Parser, ParserError, UnaryOperand,
 };
@@ -77,7 +78,7 @@ impl<T: BufRead> Parser<T> {
         &mut self,
         left_side: ExpressionNode,
     ) -> Result<ExpressionNode, ParserError> {
-        let operand = self.try_parse_operand()?;
+        let operand = self.try_parse_operand(&left_side)?;
         match operand {
             Some((op, pos)) => {
                 let right_side = self.read_demand_expression_skipping_whitespace()?;
@@ -268,7 +269,10 @@ impl<T: BufRead> Parser<T> {
         }
     }
 
-    fn try_parse_operand(&mut self) -> Result<Option<(Operand, Location)>, ParserError> {
+    fn try_parse_operand(
+        &mut self,
+        left_side: &ExpressionNode,
+    ) -> Result<Option<(Operand, Location)>, ParserError> {
         // if we can't find an operand, we need to restore the whitespace as it was,
         // in case there is a next call that will be demanding for it
         let (opt_space, next) = self.read_preserve_whitespace()?;
@@ -279,17 +283,26 @@ impl<T: BufRead> Parser<T> {
             LexemeNode::Symbol('+', pos) => Ok(Some((Operand::Plus, pos))),
             LexemeNode::Symbol('-', pos) => Ok(Some((Operand::Minus, pos))),
             LexemeNode::Keyword(Keyword::And, _, pos) => {
-                // TODO test that leading space is mandatory but not if parenthesis was provided
-                // TODO test that trailing space post AND is mandatory but not if parenthesis will be provided
-                Ok(Some((Operand::And, pos)))
+                if opt_space.is_some() || left_side.is_parenthesis() {
+                    Ok(Some((Operand::And, pos)))
+                } else {
+                    self.buf_lexer.undo(next);
+                    self.buf_lexer.undo(opt_space);
+                    Ok(None)
+                }
             }
-            LexemeNode::Keyword(Keyword::Or, _, pos) => Ok(Some((Operand::Or, pos))),
+            LexemeNode::Keyword(Keyword::Or, _, pos) => {
+                if opt_space.is_some() || left_side.is_parenthesis() {
+                    Ok(Some((Operand::Or, pos)))
+                } else {
+                    self.buf_lexer.undo(next);
+                    self.buf_lexer.undo(opt_space);
+                    Ok(None)
+                }
+            }
             _ => {
                 self.buf_lexer.undo(next);
-                match opt_space {
-                    Some(x) => self.buf_lexer.undo(x),
-                    _ => (),
-                }
+                self.buf_lexer.undo(opt_space);
                 Ok(None)
             }
         }
@@ -342,7 +355,8 @@ fn integer_literal_to_expression_node(
 mod tests {
     use super::super::test_utils::*;
     use crate::common::*;
-    use crate::parser::{Expression, Name, Operand, Statement, UnaryOperand};
+    use crate::lexer::{Keyword, LexemeNode};
+    use crate::parser::{Expression, Name, Operand, ParserError, Statement, UnaryOperand};
 
     macro_rules! assert_expression {
         ($left:expr, $right:expr) => {
@@ -756,6 +770,76 @@ mod tests {
                     )
                     .at_rc(1, 8)
                 )
+            )
+        );
+    }
+
+    #[test]
+    fn test_and_or_leading_whitespace() {
+        assert_expression!(
+            "1 AND 2",
+            Expression::BinaryExpression(
+                Operand::And,
+                Box::new(1.as_lit_expr(1, 7)),
+                Box::new(2.as_lit_expr(1, 13))
+            )
+        );
+        assert_eq!(
+            parse_err("PRINT 1AND 2"),
+            ParserError::Unexpected(
+                "Expected comma or EOL".to_string(),
+                LexemeNode::Keyword(Keyword::And, "AND".to_string(), Location::new(1, 8))
+            )
+        );
+        assert_expression!(
+            "(1 OR 2)AND 3",
+            Expression::BinaryExpression(
+                Operand::And,
+                Box::new(
+                    Expression::Parenthesis(Box::new(
+                        Expression::BinaryExpression(
+                            Operand::Or,
+                            Box::new(1.as_lit_expr(1, 8)),
+                            Box::new(2.as_lit_expr(1, 13))
+                        )
+                        .at_rc(1, 10)
+                    ))
+                    .at_rc(1, 7)
+                ),
+                Box::new(3.as_lit_expr(1, 19))
+            )
+        );
+        assert_expression!(
+            "1 OR 2",
+            Expression::BinaryExpression(
+                Operand::Or,
+                Box::new(1.as_lit_expr(1, 7)),
+                Box::new(2.as_lit_expr(1, 12))
+            )
+        );
+        assert_eq!(
+            parse_err("PRINT 1OR 2"),
+            ParserError::Unexpected(
+                "Expected comma or EOL".to_string(),
+                LexemeNode::Keyword(Keyword::Or, "OR".to_string(), Location::new(1, 8))
+            )
+        );
+        assert_expression!(
+            "(1 AND 2)OR 3",
+            Expression::BinaryExpression(
+                Operand::Or,
+                Box::new(
+                    Expression::Parenthesis(Box::new(
+                        Expression::BinaryExpression(
+                            Operand::And,
+                            Box::new(1.as_lit_expr(1, 8)),
+                            Box::new(2.as_lit_expr(1, 14))
+                        )
+                        .at_rc(1, 10)
+                    ))
+                    .at_rc(1, 7)
+                ),
+                Box::new(3.as_lit_expr(1, 19))
             )
         );
     }
