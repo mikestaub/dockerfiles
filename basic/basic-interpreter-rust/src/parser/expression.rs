@@ -275,7 +275,7 @@ impl<T: BufRead> Parser<T> {
         match next {
             LexemeNode::Symbol('<', pos) => Ok(Some((self.less_or_lte_or_ne()?, pos))),
             LexemeNode::Symbol('>', pos) => Ok(Some((self.greater_or_gte()?, pos))),
-            LexemeNode::Symbol('=', pos) => Ok(Some((Operand::Equal, pos))), // TODO test
+            LexemeNode::Symbol('=', pos) => Ok(Some((Operand::Equal, pos))),
             LexemeNode::Symbol('+', pos) => Ok(Some((Operand::Plus, pos))),
             LexemeNode::Symbol('-', pos) => Ok(Some((Operand::Minus, pos))),
             LexemeNode::Keyword(Keyword::And, _, pos) => {

@@ -366,6 +366,48 @@ mod tests {
         }
     }
 
+    mod eq {
+        use super::*;
+
+        #[test]
+        fn test_equality() {
+            assert_condition!("1 = 1");
+            assert_condition_false!("1 = 2");
+        }
+    }
+
+    mod geq {
+        use super::*;
+
+        #[test]
+        fn test_greater_or_equal() {
+            assert_condition!("1 >= 1");
+            assert_condition!("2 >= 1");
+            assert_condition_false!("1 >= 2");
+        }
+    }
+
+    mod gt {
+        use super::*;
+
+        #[test]
+        fn test_greater() {
+            assert_condition!("2 > 1");
+            assert_condition_false!("2 > 2");
+            assert_condition_false!("1 > 2");
+        }
+    }
+
+    mod ne {
+        use super::*;
+
+        #[test]
+        fn test_not_equals() {
+            assert_condition!("2 <> 1");
+            assert_condition_false!("1 <> 1");
+        }
+    }
+
     mod and {
         use super::*;
 
