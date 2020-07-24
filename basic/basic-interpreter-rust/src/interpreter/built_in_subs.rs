@@ -55,7 +55,7 @@ impl<S: Stdlib> Interpreter<S> {
                 let file_access: FileAccess = self.pop_integer().into();
                 let file_handle = self.pop_file_handle();
                 self.file_manager
-                    .open(file_handle, file_name.as_ref(), file_mode)
+                    .open(file_handle, file_name.as_ref(), file_mode, file_access)
                     .map_err(|e| {
                         InterpreterError::new_with_pos(
                             format!("Could not open {}: {}", file_name, e),
