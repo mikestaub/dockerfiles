@@ -13,7 +13,9 @@ pub enum Operand {
     NotEqual,
     // arithmetic
     Plus,
-    Minus, // TODO add multiplication and division
+    Minus,
+    Multiply,
+    Divide,
     // binary
     And,
     Or,
@@ -34,7 +36,7 @@ impl Operand {
 
     pub fn is_arithmetic(&self) -> bool {
         match self {
-            Self::Plus | Self::Minus => true,
+            Self::Plus | Self::Minus | Self::Multiply | Self::Divide => true,
             _ => false,
         }
     }

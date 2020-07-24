@@ -20,8 +20,8 @@ pub fn cast_binary_op(
                 None
             }
         }
-        // 1b. minus -> if we can cast left to right, and we're not a string, that's the result
-        Operand::Minus => {
+        // 1b. minus, multiply, divide -> if we can cast left to right, and we're not a string, that's the result
+        Operand::Minus | Operand::Multiply | Operand::Divide => {
             if left.can_cast_to(right) && left != TypeQualifier::DollarString {
                 Some(left)
             } else {

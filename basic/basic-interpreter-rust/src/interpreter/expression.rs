@@ -135,6 +135,34 @@ mod tests {
         }
     }
 
+    mod multiply {
+        use super::*;
+
+        #[test]
+        fn test_multiply() {
+            assert_prints!("PRINT 6 * 7", "42");
+        }
+
+        #[test]
+        fn test_multiply_string_linter_err() {
+            assert_linter_err!(r#"PRINT "hello" * 5"#, LinterError::TypeMismatch, 1, 17);
+        }
+    }
+
+    mod divide {
+        use super::*;
+
+        #[test]
+        fn test_divide() {
+            assert_prints!("PRINT 10 / 2", "5");
+        }
+
+        #[test]
+        fn test_divide_string_linter_err() {
+            assert_linter_err!(r#"PRINT "hello" / 5"#, LinterError::TypeMismatch, 1, 17);
+        }
+    }
+
     mod unary_minus {
         use super::*;
 
@@ -553,6 +581,18 @@ mod tests {
             END FUNCTION
             "#;
             assert_prints!(program, "1", "0", "1");
+        }
+
+        #[test]
+        fn test_multiply_divide_have_priority_over_plus_minus() {
+            assert_prints!("PRINT 2 * 3 + 4", "10");
+            assert_prints!("PRINT 2 + 3 * 4", "14");
+            assert_prints!("PRINT 2 * 3 - 4", "2");
+            assert_prints!("PRINT 2 - 3 * 4", "-10");
+            assert_prints!("PRINT 6 / 3 + 4", "6");
+            assert_prints!("PRINT 2 + 8 / 4", "4");
+            assert_prints!("PRINT 6 / 3 - 4", "-2");
+            assert_prints!("PRINT 2 - 12 / 4", "-1");
         }
     }
 }

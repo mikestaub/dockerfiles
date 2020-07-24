@@ -20,6 +20,8 @@ pub enum Instruction {
     /// Adds registers A and B and stores the results into register A
     Plus,
     Minus,
+    Multiply,
+    Divide,
     Less,
     LessOrEqual,
     Equal,

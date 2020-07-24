@@ -5,8 +5,8 @@ use crate::interpreter::context_owner::ContextOwner;
 use crate::interpreter::io::FileManager;
 use crate::interpreter::{InterpreterError, Result, Stdlib};
 
-use crate::casting::cast;
 use crate::parser::TypeQualifier;
+use crate::variant::cast;
 use crate::variant::Variant;
 
 use std::cmp::Ordering;
@@ -179,7 +179,7 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 let a = self.get_a();
                 let b = self.get_b();
                 let c = a
-                    .plus(&b)
+                    .plus(b)
                     .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 self.set_a(c);
             }
@@ -187,7 +187,23 @@ impl<TStdlib: Stdlib> Interpreter<TStdlib> {
                 let a = self.get_a();
                 let b = self.get_b();
                 let c = a
-                    .minus(&b)
+                    .minus(b)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
+            }
+            Instruction::Multiply => {
+                let a = self.get_a();
+                let b = self.get_b();
+                let c = a
+                    .multiply(b)
+                    .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
+                self.set_a(c);
+            }
+            Instruction::Divide => {
+                let a = self.get_a();
+                let b = self.get_b();
+                let c = a
+                    .divide(b)
                     .map_err(|e| InterpreterError::new_with_pos(e, pos))?;
                 self.set_a(c);
             }

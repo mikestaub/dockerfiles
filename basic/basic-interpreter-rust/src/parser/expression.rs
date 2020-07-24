@@ -98,7 +98,9 @@ impl<T: BufRead> Parser<T> {
             Expression::BinaryExpression(r_op, r_left, r_right) => {
                 let should_flip = op.is_arithmetic() && (r_op.is_relational() || r_op.is_binary())
                     || op.is_relational() && r_op.is_binary()
-                    || op == Operand::And && *r_op == Operand::Or;
+                    || op == Operand::And && *r_op == Operand::Or
+                    || (op == Operand::Multiply || op == Operand::Divide)
+                        && (*r_op == Operand::Plus || *r_op == Operand::Minus);
                 if should_flip {
                     Expression::BinaryExpression(
                         *r_op,
@@ -282,6 +284,8 @@ impl<T: BufRead> Parser<T> {
             LexemeNode::Symbol('=', pos) => Ok(Some((Operand::Equal, pos))),
             LexemeNode::Symbol('+', pos) => Ok(Some((Operand::Plus, pos))),
             LexemeNode::Symbol('-', pos) => Ok(Some((Operand::Minus, pos))),
+            LexemeNode::Symbol('*', pos) => Ok(Some((Operand::Multiply, pos))),
+            LexemeNode::Symbol('/', pos) => Ok(Some((Operand::Divide, pos))),
             LexemeNode::Keyword(Keyword::And, _, pos) => {
                 if opt_space.is_some() || left_side.is_parenthesis() {
                     Ok(Some((Operand::And, pos)))
@@ -312,7 +316,7 @@ impl<T: BufRead> Parser<T> {
         let next = self.buf_lexer.read()?;
         match next {
             LexemeNode::Symbol('=', _) => Ok(Operand::LessOrEqual),
-            LexemeNode::Symbol('>', _) => Ok(Operand::NotEqual), // TODO test
+            LexemeNode::Symbol('>', _) => Ok(Operand::NotEqual),
             _ => {
                 self.buf_lexer.undo(next);
                 Ok(Operand::Less)
