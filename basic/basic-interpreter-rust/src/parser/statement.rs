@@ -1,3 +1,4 @@
+use crate::built_ins;
 use crate::common::*;
 use crate::lexer::{Keyword, LexemeNode};
 use crate::parser::types::*;
@@ -16,6 +17,9 @@ impl<T: BufRead> Parser<T> {
             LexemeNode::Keyword(Keyword::Line, _, pos) => self.demand_line_input(pos),
             LexemeNode::Keyword(Keyword::On, _, pos) => self.demand_on().map(|x| x.at(pos)),
             LexemeNode::Keyword(Keyword::Open, _, pos) => self.demand_open().map(|x| x.at(pos)),
+            LexemeNode::Keyword(Keyword::Name, _, pos) => {
+                built_ins::name::demand(self).map(|x| x.at(pos))
+            }
             LexemeNode::Keyword(Keyword::Select, _, pos) => {
                 self.demand_select_case().map(|x| x.at(pos))
             }
