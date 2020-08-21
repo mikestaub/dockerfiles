@@ -11,6 +11,14 @@ docker run --rm -v $PWD:/data \
   swagger-input.yml diagram-output.png
 ```
 
+To generate a .puml file:
+
+```bash
+docker run --rm -v $PWD:/data \
+  ngeor/swagger-to-diagram swagger2uml.sh \
+  swagger-input.yml diagram-output.puml
+```
+
 You can also publish the page to Confluence Cloud with a different script which
 is baked into the image:
 
